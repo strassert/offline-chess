@@ -12,10 +12,8 @@
 #>
 
 param(
-    # FTP-Server. Der Standard 'localhost' bedeutet: der FTP-Dienst laeuft
-    # auf demselben Rechner, dessen Laufwerk F: das Ziel ist. Bei Bedarf
-    # anpassen, z.B. auf die IP oder den Hostnamen des Servers.
-    [string]$FtpHost = "localhost",
+    # FTP-Server.
+    [string]$FtpHost = "strassert.brdev.net",
 
     [string]$User = "a",
     [string]$Pass = "123",

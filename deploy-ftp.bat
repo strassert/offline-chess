@@ -7,7 +7,7 @@ REM ---------------------------------------------------------------
 setlocal
 
 REM --- Konfiguration ---------------------------------------------
-set "FTPHOST=localhost"
+set "FTPHOST=strassert.brdev.net"
 set "FTPUSER=a"
 set "FTPPASS=123"
 set "SOURCEURL=https://raw.githubusercontent.com/strassert/offline-chess/main/chess.html"
