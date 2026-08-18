@@ -2,30 +2,22 @@
     deploy-ftp.ps1
     --------------
     Laedt chess.html direkt von GitHub (raw) herunter und kopiert sie
-    per FTP nach F:/web/.
+    per FTP nach F:\web.
+
+    Der Login landet in C:\, daher wird per FTP auf Laufwerk F:
+    gewechselt, der Ordner "web" angelegt und die Datei dort abgelegt.
+    Fuer den Laufwerkswechsel wird der eingebaute ftp.exe-Client genutzt.
 
     Aufruf (Windows PowerShell):
         powershell -ExecutionPolicy Bypass -File .\deploy-ftp.ps1
-
-    Optional koennen Host, Benutzer und Passwort ueberschrieben werden:
-        .\deploy-ftp.ps1 -FtpHost "192.168.0.10" -User "a" -Pass "123"
 #>
 
 param(
-    # FTP-Server.
-    [string]$FtpHost = "strassert.brdev.net",
-
-    [string]$User = "a",
-    [string]$Pass = "123",
-
-    # Quelle: die immer aktuelle HTML aus dem GitHub-Repository (Branch main).
+    [string]$FtpHost   = "strassert.brdev.net",
+    [string]$User      = "a",
+    [string]$Pass      = "123",
     [string]$SourceUrl = "https://raw.githubusercontent.com/strassert/offline-chess/main/chess.html",
-
-    # Zielpfad auf dem FTP-Server. Muss dort auf F:/web/ zeigen.
-    # Je nach FTP-Serverkonfiguration ist das entweder ein absoluter Pfad
-    # wie unten, oder ein relativer Pfad ("/web/chess.html"), wenn F:\
-    # bereits das FTP-Stammverzeichnis ist.
-    [string]$RemotePath = "F:/web/chess.html"
+    [string]$RemoteFile = "chess.html"
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,31 +31,26 @@ Write-Host "Lade HTML von GitHub..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $SourceUrl -OutFile $tmp -UseBasicParsing
 Write-Host "  -> $tmp ($((Get-Item $tmp).Length) Bytes)" -ForegroundColor Green
 
-# 2) Datei per FTP hochladen ---------------------------------------------
-# FTP-URI aufbauen. Backslashes im Pfad zu Slashes normalisieren.
-$remote = $RemotePath -replace '\\', '/'
-$ftpUri = "ftp://$FtpHost/$($remote.TrimStart('/'))"
+# 2) FTP-Skript fuer ftp.exe erzeugen ------------------------------------
+#    cd F:  -> Laufwerk wechseln
+#    mkdir web -> Ordner anlegen (Fehler wird ignoriert, falls vorhanden)
+#    cd web -> hineinwechseln
+#    put   -> Datei hochladen
+$ftpScript = Join-Path $env:TEMP "deploy-ftp.txt"
+@(
+    "open $FtpHost"
+    "user $User $Pass"
+    "binary"
+    "cd F:"
+    "mkdir web"
+    "cd web"
+    "put `"$tmp`" $RemoteFile"
+    "bye"
+) | Set-Content -Path $ftpScript -Encoding ASCII
 
-Write-Host "Lade nach $ftpUri hoch..." -ForegroundColor Cyan
-
-$request = [System.Net.FtpWebRequest]::Create($ftpUri)
-$request.Method      = [System.Net.WebRequestMethods+Ftp]::UploadFile
-$request.Credentials = New-Object System.Net.NetworkCredential($User, $Pass)
-$request.UseBinary   = $true
-$request.UsePassive  = $true
-$request.KeepAlive   = $false
-
-$bytes = [System.IO.File]::ReadAllBytes($tmp)
-$request.ContentLength = $bytes.Length
-
-$stream = $request.GetRequestStream()
-$stream.Write($bytes, 0, $bytes.Length)
-$stream.Close()
-
-$response = $request.GetResponse()
-Write-Host "  Server: $($response.StatusDescription.Trim())" -ForegroundColor Green
-$response.Close()
+Write-Host "Lade per FTP hoch nach F:\web\$RemoteFile ..." -ForegroundColor Cyan
+& ftp.exe -n -s:$ftpScript
 
 # 3) Aufraeumen -----------------------------------------------------------
-Remove-Item $tmp -ErrorAction SilentlyContinue
+Remove-Item $ftpScript, $tmp -ErrorAction SilentlyContinue
 Write-Host "Fertig." -ForegroundColor Green

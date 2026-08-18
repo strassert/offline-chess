@@ -1,7 +1,9 @@
 @echo off
 REM ---------------------------------------------------------------
 REM deploy-ftp.bat
-REM Laedt chess.html von GitHub und kopiert sie per FTP nach F:/web/.
+REM Laedt chess.html von GitHub und kopiert sie per FTP nach F:\web.
+REM Login landet in C:\, daher wird per FTP auf F: gewechselt,
+REM der Ordner web angelegt und die Datei dort hochgeladen.
 REM Nutzt curl (ab Windows 10 eingebaut) und ftp.exe.
 REM ---------------------------------------------------------------
 setlocal
@@ -11,8 +13,6 @@ set "FTPHOST=strassert.brdev.net"
 set "FTPUSER=a"
 set "FTPPASS=123"
 set "SOURCEURL=https://raw.githubusercontent.com/strassert/offline-chess/main/chess.html"
-REM Zielverzeichnis auf dem FTP-Server (muss auf F:\web zeigen).
-set "REMOTEDIR=/web"
 set "REMOTEFILE=chess.html"
 REM ---------------------------------------------------------------
 
@@ -30,11 +30,13 @@ set "FTPSCRIPT=%TEMP%\deploy-ftp.txt"
 > "%FTPSCRIPT%" echo open %FTPHOST%
 >>"%FTPSCRIPT%" echo user %FTPUSER% %FTPPASS%
 >>"%FTPSCRIPT%" echo binary
->>"%FTPSCRIPT%" echo cd %REMOTEDIR%
+>>"%FTPSCRIPT%" echo cd F:
+>>"%FTPSCRIPT%" echo mkdir web
+>>"%FTPSCRIPT%" echo cd web
 >>"%FTPSCRIPT%" echo put "%TMPFILE%" %REMOTEFILE%
 >>"%FTPSCRIPT%" echo bye
 
-echo Lade per FTP hoch nach %FTPHOST%%REMOTEDIR%/%REMOTEFILE% ...
+echo Lade per FTP hoch nach F:\web\%REMOTEFILE% ...
 ftp -n -s:"%FTPSCRIPT%"
 
 del "%FTPSCRIPT%" >nul 2>&1
