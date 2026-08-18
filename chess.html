@@ -13,21 +13,24 @@
   html,body{margin:0;height:100%;}
   body{
     background:var(--bg); color:var(--text); font-family:Segoe UI,Arial,sans-serif;
-    display:flex; align-items:center; justify-content:center; min-height:100%;
-    padding:12px; user-select:none; -webkit-user-select:none;
+    display:flex; align-items:center; justify-content:center; height:100%;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
   }
-  .app{display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; justify-content:center;}
+  .app{display:flex; gap:24px; align-items:stretch; justify-content:center;}
   .boardwrap{position:relative;}
   #board{
     display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr);
-    width:min(88vw,88vh,640px); height:min(88vw,88vh,640px);
+    width:720px; height:720px;
     border:6px solid #3c2f22; border-radius:6px; box-shadow:0 10px 30px rgba(0,0,0,.5);
     touch-action:manipulation;
   }
   .sq{position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer;}
   .sq.light{background:var(--light);} .sq.dark{background:var(--dark);}
-  .sq .piece{font-size:min(11vw,11vh,74px); line-height:1; pointer-events:none;
-    text-shadow:0 1px 2px rgba(0,0,0,.35);}
+  .sq .piece{font-size:66px; line-height:1; pointer-events:none; paint-order:stroke fill;}
+  .piece.white{color:#faf7ef; -webkit-text-stroke:2.5px #241206;
+    text-shadow:0 1px 2px rgba(0,0,0,.4);}
+  .piece.black{color:#141414; -webkit-text-stroke:2.5px #e7d7b4;
+    text-shadow:0 1px 2px rgba(0,0,0,.45);}
   .sq.sel{box-shadow:inset 0 0 0 4px var(--sel);}
   .sq.lastmove{box-shadow:inset 0 0 0 4px rgba(111,174,95,.7);}
   .sq.check{box-shadow:inset 0 0 0 4px var(--check);}
@@ -37,7 +40,8 @@
     border:5px solid rgba(0,0,0,.3); border-radius:50%;}
   .coord{position:absolute; font-size:11px; font-weight:700; opacity:.55; pointer-events:none;}
   .coord.file{bottom:2px; right:4px;} .coord.rank{top:2px; left:4px;}
-  .panel{background:var(--panel); border-radius:12px; padding:18px 20px; width:260px;
+  .panel{background:var(--panel); border-radius:12px; padding:18px 20px; width:240px;
+    height:720px; display:flex; flex-direction:column;
     box-shadow:0 8px 24px rgba(0,0,0,.4);}
   h1{font-size:22px; margin:0 0 4px;}
   .sub{opacity:.6; font-size:12px; margin-bottom:14px;}
@@ -49,7 +53,7 @@
     font-size:14px; font-weight:600; cursor:pointer; background:var(--accent); color:#0e1a09;}
   .btn.sec{background:#3a3f4a; color:var(--text);}
   .btn:active{transform:translateY(1px);}
-  .moves{margin-top:16px; max-height:230px; overflow:auto; font-size:13px;
+  .moves{margin-top:16px; flex:1; min-height:0; overflow:auto; font-size:13px;
     font-family:Consolas,monospace; background:#1c1f26; border-radius:8px; padding:8px 10px;}
   .moves div{padding:2px 0; display:flex; gap:8px;}
   .moves .n{opacity:.5; width:26px;}
@@ -80,8 +84,9 @@
 <script>
 "use strict";
 /* ---------- Schach-Engine (vollständige Regeln, keine externen Libs) ---------- */
-const GLYPH={wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',
-             bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};
+// Eine gefüllte Glyphe pro Figurtyp; Farbe wird per CSS-Klasse gesetzt,
+// damit Weiß und Schwarz auf jedem Browser sicher unterscheidbar sind.
+const GLYPH={K:'♚',Q:'♛',R:'♜',B:'♝',N:'♞',P:'♟'};
 
 function initBoard(){
   const b=Array.from({length:8},()=>Array(8).fill(null));
@@ -296,8 +301,9 @@ function render(){
     sq.className='sq '+((r+c)%2===0?'light':'dark');
     sq.dataset.r=r; sq.dataset.c=c;
     const p=state.board[r][c];
-    if(p){ const sp=document.createElement('span'); sp.className='piece';
-           sp.textContent=GLYPH[p]; sq.appendChild(sp); }
+    if(p){ const sp=document.createElement('span');
+           sp.className='piece '+(p[0]==='w'?'white':'black');
+           sp.textContent=GLYPH[p[1]]; sq.appendChild(sp); }
     if(sel&&sel.r===r&&sel.c===c) sq.classList.add('sel');
     if(last&&((last.from.r===r&&last.from.c===c)||(last.to.r===r&&last.to.c===c)))
       sq.classList.add('lastmove');
@@ -379,8 +385,8 @@ function finishMove(mv,promo){
 function askPromotion(col,cb){
   promoCard.innerHTML='';
   for(const t of ['Q','R','B','N']){
-    const el=document.createElement('div'); el.className='p';
-    el.textContent=GLYPH[col+t];
+    const el=document.createElement('div'); el.className='p '+(col==='w'?'white':'black');
+    el.textContent=GLYPH[t];
     el.addEventListener('click',()=>{ promoEl.classList.remove('on'); cb(t); });
     promoCard.appendChild(el);
   }
