@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schach</title>
+<style>
+  :root{
+    --light:#e8d3a8; --dark:#9d6b3f; --bg:#20232a; --panel:#2b2f38;
+    --text:#f2efe7; --accent:#6fae5f; --sel:#f6e05e; --move:#7fd8ff; --check:#ff6b6b;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg); color:var(--text); font-family:Segoe UI,Arial,sans-serif;
+    display:flex; align-items:center; justify-content:center; min-height:100%;
+    padding:12px; user-select:none; -webkit-user-select:none;
+  }
+  .app{display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; justify-content:center;}
+  .boardwrap{position:relative;}
+  #board{
+    display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr);
+    width:min(88vw,88vh,640px); height:min(88vw,88vh,640px);
+    border:6px solid #3c2f22; border-radius:6px; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    touch-action:manipulation;
+  }
+  .sq{position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .sq.light{background:var(--light);} .sq.dark{background:var(--dark);}
+  .sq .piece{font-size:min(11vw,11vh,74px); line-height:1; pointer-events:none;
+    text-shadow:0 1px 2px rgba(0,0,0,.35);}
+  .sq.sel{box-shadow:inset 0 0 0 4px var(--sel);}
+  .sq.lastmove{box-shadow:inset 0 0 0 4px rgba(111,174,95,.7);}
+  .sq.check{box-shadow:inset 0 0 0 4px var(--check);}
+  .dot{position:absolute; width:30%; height:30%; border-radius:50%;
+    background:rgba(0,0,0,.28); pointer-events:none;}
+  .sq.capture .dot{width:86%; height:86%; background:transparent;
+    border:5px solid rgba(0,0,0,.3); border-radius:50%;}
+  .coord{position:absolute; font-size:11px; font-weight:700; opacity:.55; pointer-events:none;}
+  .coord.file{bottom:2px; right:4px;} .coord.rank{top:2px; left:4px;}
+  .panel{background:var(--panel); border-radius:12px; padding:18px 20px; width:260px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  h1{font-size:22px; margin:0 0 4px;}
+  .sub{opacity:.6; font-size:12px; margin-bottom:14px;}
+  .status{font-size:16px; font-weight:600; min-height:44px; padding:10px 12px;
+    background:#1c1f26; border-radius:8px; margin-bottom:14px; display:flex;
+    align-items:center; gap:10px;}
+  .turnDot{width:16px; height:16px; border-radius:50%; border:2px solid #888; flex:0 0 auto;}
+  .btn{display:block; width:100%; padding:11px; margin-top:8px; border:0; border-radius:8px;
+    font-size:14px; font-weight:600; cursor:pointer; background:var(--accent); color:#0e1a09;}
+  .btn.sec{background:#3a3f4a; color:var(--text);}
+  .btn:active{transform:translateY(1px);}
+  .moves{margin-top:16px; max-height:230px; overflow:auto; font-size:13px;
+    font-family:Consolas,monospace; background:#1c1f26; border-radius:8px; padding:8px 10px;}
+  .moves div{padding:2px 0; display:flex; gap:8px;}
+  .moves .n{opacity:.5; width:26px;}
+  .promo{position:absolute; inset:0; background:rgba(0,0,0,.6); display:none;
+    align-items:center; justify-content:center; border-radius:6px;}
+  .promo.on{display:flex;}
+  .promo .card{background:var(--panel); border-radius:12px; padding:16px; display:flex; gap:10px;}
+  .promo .p{font-size:52px; cursor:pointer; padding:4px 8px; border-radius:8px;}
+  .promo .p:hover{background:#3a3f4a;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="boardwrap">
+    <div id="board"></div>
+    <div class="promo" id="promo"><div class="card" id="promoCard"></div></div>
+  </div>
+  <div class="panel">
+    <h1>♟ Schach</h1>
+    <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
+    <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Weiß am Zug</span></div>
+    <button class="btn" id="newBtn">Neues Spiel</button>
+    <button class="btn sec" id="undoBtn">Zug zurück</button>
+    <button class="btn sec" id="flipBtn">Brett drehen</button>
+    <div class="moves" id="moves"></div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ---------- Schach-Engine (vollständige Regeln, keine externen Libs) ---------- */
+const GLYPH={wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',
+             bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};
+
+function initBoard(){
+  const b=Array.from({length:8},()=>Array(8).fill(null));
+  const back=['R','N','B','Q','K','B','N','R'];
+  for(let c=0;c<8;c++){
+    b[0][c]='b'+back[c]; b[1][c]='bP';
+    b[6][c]='wP';        b[7][c]='w'+back[c];
+  }
+  return b;
+}
+
+let state, history, selected, legalCache, flipped=false;
+
+function newGame(){
+  state={
+    board:initBoard(), turn:'w',
+    castle:{wK:true,wQ:true,bK:true,bQ:true},
+    ep:null,                 // en-passant Zielfeld [r,c] oder null
+    halfmove:0, fullmove:1
+  };
+  history=[]; selected=null; legalCache=null;
+  render();
+}
+
+const inside=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
+const colorOf=p=>p?p[0]:null;
+const typeOf =p=>p?p[1]:null;
+
+// Pseudo-legale Züge einer Figur (ohne Schach-Prüfung)
+function pieceMoves(bd,r,c,st){
+  const p=bd[r][c]; if(!p) return [];
+  const col=p[0], t=p[1], dir=col==='w'?-1:1, out=[];
+  const add=(rr,cc,flag)=>{ if(inside(rr,cc)) out.push({r:rr,c:cc,flag}); };
+
+  if(t==='P'){
+    // vorwärts
+    if(inside(r+dir,c)&&!bd[r+dir][c]){
+      add(r+dir,c);
+      const start=col==='w'?6:1;
+      if(r===start&&!bd[r+2*dir][c]) add(r+2*dir,c,'double');
+    }
+    // schlagen + en passant
+    for(const dc of [-1,1]){
+      const rr=r+dir,cc=c+dc;
+      if(!inside(rr,cc)) continue;
+      if(bd[rr][cc]&&bd[rr][cc][0]!==col) add(rr,cc,'capture');
+      else if(st.ep&&st.ep[0]===rr&&st.ep[1]===cc) add(rr,cc,'ep');
+    }
+    return out;
+  }
+  if(t==='N'){
+    for(const[dr,dc]of[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]){
+      const rr=r+dr,cc=c+dc;
+      if(inside(rr,cc)&&(!bd[rr][cc]||bd[rr][cc][0]!==col)) add(rr,cc);
+    }
+    return out;
+  }
+  if(t==='K'){
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+      if(!dr&&!dc)continue;
+      const rr=r+dr,cc=c+dc;
+      if(inside(rr,cc)&&(!bd[rr][cc]||bd[rr][cc][0]!==col)) add(rr,cc);
+    }
+    // Rochade wird in legalMoves() ergänzt (braucht Schach-Prüfung)
+    return out;
+  }
+  // Gleiter: B,R,Q
+  const dirs=[];
+  if(t==='B'||t==='Q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+  if(t==='R'||t==='Q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+  for(const[dr,dc]of dirs){
+    let rr=r+dr,cc=c+dc;
+    while(inside(rr,cc)){
+      if(!bd[rr][cc]){ add(rr,cc); }
+      else{ if(bd[rr][cc][0]!==col) add(rr,cc,'capture'); break; }
+      rr+=dr; cc+=dc;
+    }
+  }
+  return out;
+}
+
+function findKing(bd,col){
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++) if(bd[r][c]===col+'K') return [r,c];
+  return null;
+}
+function attacked(bd,r,c,byCol,st){
+  for(let rr=0;rr<8;rr++)for(let cc=0;cc<8;cc++){
+    const p=bd[rr][cc];
+    if(p&&p[0]===byCol){
+      // Für Angriffsprüfung: Bauern schlagen nur diagonal -> pieceMoves liefert
+      // Schlagfelder korrekt (leere Diagonale wird nicht als Angriff gezählt,
+      // aber ein König darf dort auch nicht hin -> wir prüfen Zielfeld separat).
+      for(const m of pieceMoves(bd,rr,cc,st)){
+        if(p[1]==='P'){ if(m.c!==cc && m.r===r && m.c===c) return true; }
+        else if(m.r===r&&m.c===c) return true;
+      }
+    }
+  }
+  return false;
+}
+function inCheck(bd,col,st){
+  const k=findKing(bd,col); if(!k) return false;
+  return attacked(bd,k[0],k[1],col==='w'?'b':'w',st);
+}
+
+// wendet einen Zug auf eine Kopie an, gibt neuen Brett-/State zurück
+function applyMove(st,from,to){
+  const bd=st.board.map(row=>row.slice());
+  const p=bd[from.r][from.c], col=p[0], t=p[1];
+  const ns={board:bd, turn:col==='w'?'b':'w',
+            castle:{...st.castle}, ep:null,
+            halfmove:st.halfmove+1, fullmove:st.fullmove+(col==='b'?1:0)};
+  let captured=bd[to.r][to.c];
+
+  // en passant Schlag
+  if(t==='P'&&to.flag==='ep'){ captured=bd[from.r][to.c]; bd[from.r][to.c]=null; }
+  // Zug ausführen
+  bd[to.r][to.c]=p; bd[from.r][from.c]=null;
+  // Doppelschritt -> ep-Feld setzen
+  if(t==='P'&&to.flag==='double') ns.ep=[(from.r+to.r)/2,from.c];
+  // Umwandlung
+  if(t==='P'&&(to.r===0||to.r===7)) bd[to.r][to.c]=col+(to.promo||'Q');
+  // Rochade: Turm mitziehen
+  if(t==='K'&&Math.abs(to.c-from.c)===2){
+    const row=from.r;
+    if(to.c===6){ bd[row][5]=bd[row][7]; bd[row][7]=null; }   // kurz
+    else        { bd[row][3]=bd[row][0]; bd[row][0]=null; }   // lang
+  }
+  // Rochaderechte aktualisieren
+  if(t==='K'){ ns.castle[col+'K']=false; ns.castle[col+'Q']=false; }
+  if(t==='R'){
+    if(from.c===0) ns.castle[col+'Q']=false;
+    if(from.c===7) ns.castle[col+'K']=false;
+  }
+  // geschlagener Turm auf Ausgangsfeld -> Recht des Gegners löschen
+  const oc=col==='w'?'b':'w';
+  if(to.r===(oc==='w'?7:0)){
+    if(to.c===0) ns.castle[oc+'Q']=false;
+    if(to.c===7) ns.castle[oc+'K']=false;
+  }
+  if(t==='P'||captured) ns.halfmove=0;
+  return {ns,captured};
+}
+
+// alle legalen Züge einer Farbe (mit Schach-Prüfung + Rochade)
+function legalMoves(st,col){
+  const res=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=st.board[r][c];
+    if(!p||p[0]!==col) continue;
+    for(const m of pieceMoves(st.board,r,c,st)){
+      const from={r,c}, to={r:m.r,c:m.c,flag:m.flag};
+      const {ns}=applyMove(st,from,to);
+      if(!inCheck(ns.board,col,ns)) res.push({from,to});
+    }
+  }
+  // Rochade
+  const row=col==='w'?7:0;
+  if(st.board[row][4]===col+'K' && !inCheck(st.board,col,st)){
+    const enemy=col==='w'?'b':'w';
+    // kurz
+    if(st.castle[col+'K'] && !st.board[row][5] && !st.board[row][6] &&
+       st.board[row][7]===col+'R' &&
+       !attacked(st.board,row,5,enemy,st) && !attacked(st.board,row,6,enemy,st)){
+      res.push({from:{r:row,c:4},to:{r:row,c:6,flag:'castle'}});
+    }
+    // lang
+    if(st.castle[col+'Q'] && !st.board[row][1] && !st.board[row][2] && !st.board[row][3] &&
+       st.board[row][0]===col+'R' &&
+       !attacked(st.board,row,3,enemy,st) && !attacked(st.board,row,2,enemy,st)){
+      res.push({from:{r:row,c:4},to:{r:row,c:2,flag:'castle'}});
+    }
+  }
+  return res;
+}
+
+/* ---------- Notation ---------- */
+const FILES='abcdefgh';
+function sqName(r,c){ return FILES[c]+(8-r); }
+function moveSAN(st,mv,promo){
+  const p=st.board[mv.from.r][mv.from.c], t=p[1];
+  if(mv.to.flag==='castle') return mv.to.c===6?'O-O':'O-O-O';
+  const capture = st.board[mv.to.r][mv.to.c] || mv.to.flag==='ep';
+  let s='';
+  if(t==='P'){ if(capture) s+=FILES[mv.from.c]+'x'; s+=sqName(mv.to.r,mv.to.c);
+               if(mv.to.r===0||mv.to.r===7) s+='='+(promo||'Q'); }
+  else{ s+=t; if(capture) s+='x'; s+=sqName(mv.to.r,mv.to.c); }
+  return s;
+}
+
+/* ---------- Rendering & Interaktion ---------- */
+const boardEl=document.getElementById('board');
+const statusEl=document.getElementById('status');
+const turnDot=document.getElementById('turnDot');
+const movesEl=document.getElementById('moves');
+const promoEl=document.getElementById('promo');
+const promoCard=document.getElementById('promoCard');
+
+function currentLegal(){ if(!legalCache) legalCache=legalMoves(state,state.turn); return legalCache; }
+
+function render(){
+  boardEl.innerHTML='';
+  const last=history.length?history[history.length-1].mv:null;
+  const checkNow=inCheck(state.board,state.turn,state);
+  const kingPos=checkNow?findKing(state.board,state.turn):null;
+  const sel=selected;
+  const targets = sel ? currentLegal().filter(m=>m.from.r===sel.r&&m.from.c===sel.c) : [];
+
+  for(let vr=0;vr<8;vr++)for(let vc=0;vc<8;vc++){
+    const r=flipped?7-vr:vr, c=flipped?7-vc:vc;
+    const sq=document.createElement('div');
+    sq.className='sq '+((r+c)%2===0?'light':'dark');
+    sq.dataset.r=r; sq.dataset.c=c;
+    const p=state.board[r][c];
+    if(p){ const sp=document.createElement('span'); sp.className='piece';
+           sp.textContent=GLYPH[p]; sq.appendChild(sp); }
+    if(sel&&sel.r===r&&sel.c===c) sq.classList.add('sel');
+    if(last&&((last.from.r===r&&last.from.c===c)||(last.to.r===r&&last.to.c===c)))
+      sq.classList.add('lastmove');
+    if(kingPos&&kingPos[0]===r&&kingPos[1]===c) sq.classList.add('check');
+    const tgt=targets.find(m=>m.to.r===r&&m.to.c===c);
+    if(tgt){ const d=document.createElement('div'); d.className='dot'; sq.appendChild(d);
+             if(state.board[r][c]||tgt.to.flag==='ep') sq.classList.add('capture'); }
+    // Koordinaten am Rand
+    if(vc===0){ const cr=document.createElement('div'); cr.className='coord rank';
+                cr.textContent=8-r; sq.appendChild(cr); }
+    if(vr===7){ const cf=document.createElement('div'); cf.className='coord file';
+                cf.textContent=FILES[c]; sq.appendChild(cf); }
+    sq.addEventListener('click',()=>onSquare(r,c));
+    boardEl.appendChild(sq);
+  }
+  // Status
+  const legal=currentLegal();
+  const side=state.turn==='w'?'Weiß':'Schwarz';
+  turnDot.style.background=state.turn==='w'?'#f2efe7':'#111';
+  if(legal.length===0){
+    statusEl.textContent = checkNow
+      ? 'Schachmatt – '+(state.turn==='w'?'Schwarz':'Weiß')+' gewinnt!'
+      : 'Patt – Remis.';
+  } else {
+    statusEl.textContent = side+' am Zug'+(checkNow?' – Schach!':'');
+  }
+  renderMoves();
+}
+
+function renderMoves(){
+  movesEl.innerHTML='';
+  for(let i=0;i<history.length;i+=2){
+    const row=document.createElement('div');
+    const n=document.createElement('span'); n.className='n'; n.textContent=(i/2+1)+'.';
+    const w=document.createElement('span'); w.textContent=history[i].san;
+    row.appendChild(n); row.appendChild(w);
+    if(history[i+1]){ const b=document.createElement('span'); b.textContent=history[i+1].san;
+                      row.appendChild(b); }
+    movesEl.appendChild(row);
+  }
+  movesEl.scrollTop=movesEl.scrollHeight;
+}
+
+function onSquare(r,c){
+  if(currentLegal().length===0) return;   // Partie beendet
+  const p=state.board[r][c];
+  if(selected){
+    const mv=currentLegal().find(m=>m.from.r===selected.r&&m.from.c===selected.c
+                                   &&m.to.r===r&&m.to.c===c);
+    if(mv){ doMove(mv); return; }
+  }
+  if(p&&p[0]===state.turn){ selected={r,c}; render(); }
+  else { selected=null; render(); }
+}
+
+function doMove(mv){
+  const p=state.board[mv.from.r][mv.from.c];
+  // Umwandlung -> Auswahl
+  if(p[1]==='P'&&(mv.to.r===0||mv.to.r===7)){
+    askPromotion(state.turn,(choice)=>finishMove(mv,choice));
+    return;
+  }
+  finishMove(mv,null);
+}
+function finishMove(mv,promo){
+  const to={...mv.to}; if(promo) to.promo=promo;
+  const san=moveSAN(state,{from:mv.from,to},promo);
+  const {ns}=applyMove(state,mv.from,to);
+  history.push({mv:{from:mv.from,to:{r:to.r,c:to.c}},san});
+  state=ns; selected=null; legalCache=null;
+  // Schach/Matt-Suffix
+  const chk=inCheck(state.board,state.turn,state);
+  const noMoves=legalMoves(state,state.turn).length===0;
+  const h=history[history.length-1];
+  if(noMoves&&chk) h.san+='#'; else if(chk) h.san+='+';
+  render();
+}
+
+function askPromotion(col,cb){
+  promoCard.innerHTML='';
+  for(const t of ['Q','R','B','N']){
+    const el=document.createElement('div'); el.className='p';
+    el.textContent=GLYPH[col+t];
+    el.addEventListener('click',()=>{ promoEl.classList.remove('on'); cb(t); });
+    promoCard.appendChild(el);
+  }
+  promoEl.classList.add('on');
+}
+
+function undo(){
+  if(!history.length) return;
+  history.pop();
+  // Zustand neu aufbauen (einfach & robust)
+  const saved=history.slice();
+  newGameSilent();
+  history=[];
+  for(const h of saved){
+    const legal=legalMoves(state,state.turn);
+    const mv=legal.find(m=>m.from.r===h.mv.from.r&&m.from.c===h.mv.from.c
+                          &&m.to.r===h.mv.to.r&&m.to.c===h.mv.to.c);
+    const promo=/=([QRBN])/.exec(h.san);
+    finishMove(mv,promo?promo[1]:null);
+  }
+  selected=null; legalCache=null; render();
+}
+function newGameSilent(){
+  state={board:initBoard(),turn:'w',
+    castle:{wK:true,wQ:true,bK:true,bQ:true},ep:null,halfmove:0,fullmove:1};
+  history=[]; selected=null; legalCache=null;
+}
+
+document.getElementById('newBtn').addEventListener('click',newGame);
+document.getElementById('undoBtn').addEventListener('click',undo);
+document.getElementById('flipBtn').addEventListener('click',()=>{flipped=!flipped;render();});
+
+newGame();
+</script>
+</body>
+</html>
