@@ -109,6 +109,7 @@ function newGame(){
   };
   history=[]; selected=null; legalCache=null;
   render();
+  Sync.publish();
 }
 
 const inside=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
@@ -379,7 +380,7 @@ function finishMove(mv,promo){
   const noMoves=legalMoves(state,state.turn).length===0;
   const h=history[history.length-1];
   if(noMoves&&chk) h.san+='#'; else if(chk) h.san+='+';
-  render();
+  if(!Sync.suppress){ render(); Sync.publish(); }
 }
 
 function askPromotion(col,cb){
@@ -400,6 +401,7 @@ function undo(){
   const saved=history.slice();
   newGameSilent();
   history=[];
+  Sync.suppress=true;
   for(const h of saved){
     const legal=legalMoves(state,state.turn);
     const mv=legal.find(m=>m.from.r===h.mv.from.r&&m.from.c===h.mv.from.c
@@ -407,12 +409,58 @@ function undo(){
     const promo=/=([QRBN])/.exec(h.san);
     finishMove(mv,promo?promo[1]:null);
   }
-  selected=null; legalCache=null; render();
+  Sync.suppress=false;
+  selected=null; legalCache=null; render(); Sync.publish();
 }
 function newGameSilent(){
   state={board:initBoard(),turn:'w',
     castle:{wK:true,wQ:true,bK:true,bQ:true},ep:null,halfmove:0,fullmove:1};
   history=[]; selected=null; legalCache=null;
+}
+
+/* ---------- Synchronisation (zwei Clients, ein Brett) ----------
+   Der komplette Spielverlauf wird als Zugliste serialisiert (z.B.
+   "e2e4 e7e5 g1f3"). Beide Seiten bauen daraus dasselbe Brett auf.
+   Sync.transport wird vom Host gesetzt:
+     - im mapp-View-Custom-Widget: Bindung an eine PLC-STRING-Variable
+     - im lokalen Demo (?demo in der URL): BroadcastChannel zwischen Tabs */
+function parseSq(s){ return {c:FILES.indexOf(s[0]), r:8-parseInt(s[1],10)}; }
+function serializeGame(){
+  return history.map(h=>{
+    const f=sqName(h.mv.from.r,h.mv.from.c), t=sqName(h.mv.to.r,h.mv.to.c);
+    const pr=/=([QRBN])/.exec(h.san);
+    return f+t+(pr?pr[1].toLowerCase():'');
+  }).join(' ');
+}
+function loadGame(str){
+  newGameSilent();
+  const codes=(str||'').trim() ? str.trim().split(/\s+/) : [];
+  Sync.suppress=true;
+  for(const code of codes){
+    const from=parseSq(code.slice(0,2)), to=parseSq(code.slice(2,4));
+    const promo=code.length>4?code[4].toUpperCase():null;
+    const mv=legalMoves(state,state.turn).find(m=>
+      m.from.r===from.r&&m.from.c===from.c&&m.to.r===to.r&&m.to.c===to.c);
+    if(!mv) break;                 // ungültiger Code -> Rest ignorieren
+    finishMove(mv,promo);
+  }
+  Sync.suppress=false;
+  selected=null; legalCache=null;
+}
+const Sync={
+  transport:null, suppress:false, last:null,
+  publish(){ if(this.transport&&!this.suppress){ const s=serializeGame();
+             this.last=s; this.transport.send(s); } },
+  receive(str){ if(str===this.last) return;   // eigener Echo -> ignorieren
+             this.last=str; loadGame(str); render(); }
+};
+window.ChessSync=Sync;             // Zugriffspunkt für das mapp-View-Widget
+
+// Lokales Demo: zwei Browser-Tabs synchron (URL mit ?demo öffnen)
+if(location.search.indexOf('demo')>=0 && 'BroadcastChannel' in window){
+  const bc=new BroadcastChannel('chess-sync');
+  Sync.transport={ send:(s)=>bc.postMessage(s) };
+  bc.onmessage=(e)=>Sync.receive(e.data);
 }
 
 document.getElementById('newBtn').addEventListener('click',newGame);
