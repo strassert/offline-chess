@@ -63,6 +63,18 @@
   .promo .card{background:var(--panel); border-radius:12px; padding:16px; display:flex; gap:10px;}
   .promo .p{font-size:52px; cursor:pointer; padding:4px 8px; border-radius:8px;}
   .promo .p:hover{background:#3a3f4a;}
+  .seatinfo{margin-top:12px; font-size:12px; opacity:.65; text-align:center;}
+  .lobby{position:fixed; inset:0; background:rgba(16,18,23,.88); display:none;
+    align-items:center; justify-content:center; z-index:10;}
+  .lobby.on{display:flex;}
+  .lobby .card{background:var(--panel); border-radius:14px; padding:28px 32px;
+    width:320px; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  .lobby h2{margin:0 0 6px; font-size:24px;}
+  .lobby p{margin:0 0 18px; opacity:.65; font-size:13px;}
+  .lobby .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .lobby .msg{min-height:18px; margin-top:12px; font-size:12px; color:var(--sel);}
+  .btn.link{background:none; color:var(--text); opacity:.5; font-weight:400;
+    font-size:12px; padding:6px;}
 </style>
 </head>
 <body>
@@ -78,7 +90,20 @@
     <button class="btn" id="newBtn">Neues Spiel</button>
     <button class="btn sec" id="undoBtn">Zug zurück</button>
     <button class="btn sec" id="flipBtn">Brett drehen</button>
+    <button class="btn sec" id="leaveBtn" style="display:none">Platz freigeben</button>
+    <div class="seatinfo" id="seatInfo"></div>
     <div class="moves" id="moves"></div>
+  </div>
+</div>
+<div class="lobby" id="lobby">
+  <div class="card">
+    <h2>♟ Schach</h2>
+    <p>Wähle deinen Platz</p>
+    <button class="btn" id="seatW">Weiß spielen</button>
+    <button class="btn" id="seatB">Schwarz spielen</button>
+    <button class="btn sec" id="seatV">Nur zuschauen</button>
+    <div class="msg" id="lobbyMsg"></div>
+    <button class="btn link" id="resetSeats">Plätze zurücksetzen</button>
   </div>
 </div>
 <script>
@@ -456,14 +481,108 @@ function loadGame(str){
   Sync.suppress=false;
   selected=null; legalCache=null;
 }
+/* Gemeinsamer Zustand = Platzbelegung + Zugliste in einem String:
+   "<id-weiss>,<id-schwarz>|e2e4 e7e5".  Dadurch genügt eine einzige
+   SPS-Variable für Spielstand und Anmeldung. */
+const seats={w:'',b:''};
+function serializeState(){ return seats.w+','+seats.b+'|'+serializeGame(); }
+function parseState(str){
+  const s=String(str||''), i=s.indexOf('|');
+  if(i<0) return {w:'',b:'',moves:s.trim()};      // altes Format: nur Züge
+  const head=s.slice(0,i).split(',');
+  return {w:(head[0]||'').trim(), b:(head[1]||'').trim(), moves:s.slice(i+1).trim()};
+}
 const Sync={
   transport:null, suppress:false, last:null,
-  publish(){ if(this.transport&&!this.suppress){ const s=serializeGame();
+  ready:true,                    // erst nach dem ersten Abgleich darf publiziert werden
+  publish(){ if(this.transport&&!this.suppress){ const s=serializeState();
              this.last=s; this.transport.send(s); } },
-  receive(str){ if(str===this.last) return;   // eigener Echo -> ignorieren
-             this.last=str; loadGame(str); render(); }
+  receive(str){
+    if(str===this.last) return;                   // eigener Echo -> ignorieren
+    this.last=str;
+    const st=parseState(str);
+    seats.w=st.w; seats.b=st.b;
+    if(st.moves!==serializeGame()) loadGame(st.moves);
+    if(mySide==='w'&&seats.w!==myId) leaveSeat(true);       // Platz verloren
+    else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
+    render(); renderLobby();
+  }
 };
 window.ChessSync=Sync;             // Zugriffspunkt für externe Transports
+
+/* ---------- Lobby: Platz wählen oder zuschauen ---------- */
+// Kennung dieses Browsers; übersteht Reload, damit der Platz erhalten bleibt.
+let myId=null;
+try{
+  myId=sessionStorage.getItem('chessId');
+  if(!myId){ myId='p'+Math.random().toString(36).slice(2,8); sessionStorage.setItem('chessId',myId); }
+}catch(e){ myId='p'+Math.random().toString(36).slice(2,8); }
+
+const lobbyEl=document.getElementById('lobby');
+const seatInfoEl=document.getElementById('seatInfo');
+const leaveBtn=document.getElementById('leaveBtn');
+let lobbyMsg='';
+
+function seatFree(col){ return !seats[col] || seats[col]===myId; }
+function showLobby(){ if(lobbyEl) lobbyEl.classList.add('on'); renderLobby(); }
+function hideLobby(){ if(lobbyEl) lobbyEl.classList.remove('on'); }
+
+function renderLobby(){
+  if(!lobbyEl) return;
+  for(const col of ['w','b']){
+    const btn=document.getElementById('seat'+col.toUpperCase());
+    if(!btn) continue;
+    const taken=seats[col]&&seats[col]!==myId;
+    btn.disabled=!!taken||!Sync.ready;
+    btn.textContent=(col==='w'?'Weiß spielen':'Schwarz spielen')+(taken?' — besetzt':'');
+  }
+  const rs=document.getElementById('resetSeats'); if(rs) rs.disabled=!Sync.ready;
+  const m=document.getElementById('lobbyMsg');
+  if(m) m.textContent=Sync.ready?lobbyMsg:'Verbinde mit der Steuerung …';
+  if(seatInfoEl){
+    const nm=(c)=>!seats[c]?'frei':(seats[c]===myId?'du':'besetzt');
+    seatInfoEl.textContent='Weiß: '+nm('w')+' · Schwarz: '+nm('b');
+  }
+  if(leaveBtn){                       // Zuschauer kommen so zur Platzwahl zurück
+    leaveBtn.style.display=mySide?'block':'none';
+    leaveBtn.textContent=(mySide==='v')?'Platz wählen':'Platz freigeben';
+  }
+}
+
+function applySide(){
+  flipped = (mySide==='b');
+  const sub=document.querySelector('.sub');
+  if(sub) sub.textContent = mySide==='w' ? 'Du spielst Weiß'
+                          : mySide==='b' ? 'Du spielst Schwarz'
+                          : mySide==='v' ? 'Zuschauer'
+                          : 'Zwei PCs · ein Brett';
+  const hide=(mySide==='v');
+  for(const id of ['newBtn','undoBtn']){
+    const b=document.getElementById(id); if(b) b.style.display=hide?'none':'block';
+  }
+  render(); renderLobby();
+}
+
+function takeSeat(col){
+  if(!seatFree(col)){ lobbyMsg='Platz ist bereits belegt.'; renderLobby(); return; }
+  seats[col]=myId; mySide=col; lobbyMsg='';
+  Sync.publish();
+  hideLobby(); applySide();
+  // Gleichzeitige Anmeldung: nach einem Abgleich prüfen, ob der Platz hält
+  setTimeout(()=>{
+    if(mySide===col && seats[col]!==myId){
+      lobbyMsg='Ein anderer Spieler war schneller.'; leaveSeat(true);
+    }
+  },2500);
+}
+function watchOnly(){ mySide='v'; hideLobby(); applySide(); }
+function leaveSeat(lost){
+  if(mySide==='w'||mySide==='b'){
+    if(seats[mySide]===myId){ seats[mySide]=''; if(!lost) Sync.publish(); }
+  }
+  mySide=null; applySide(); showLobby();
+}
+function resetSeats(){ seats.w=''; seats.b=''; lobbyMsg=''; Sync.publish(); renderLobby(); }
 
 /* ---------- PLC-Transport (zwei PCs, ein Brett) ----------
    Synchronisiert über eine STRING-Variable der Steuerung, gelesen/geschrieben
@@ -483,31 +602,38 @@ function setupPLC(){
     const r=await fetch(G,{method:'POST',body:body('&value=none&read=1')});
     return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
   }
-  // Seitenwahl: ?side=w (Weiß), ?side=b (Schwarz), ?side=v (Zuschauer)
-  const side=(params.get('side')||'').toLowerCase().charAt(0);
-  if(side==='w'||side==='b'||side==='v') mySide=side;
-  if(mySide==='b') flipped=true;            // Schwarz sieht das Brett gedreht
-
   Sync.transport={ send:write };
-  const sub=document.querySelector('.sub');
-  if(sub) sub.textContent = mySide==='w' ? 'Du spielst Weiß · via PLC'
-                          : mySide==='b' ? 'Du spielst Schwarz · via PLC'
-                          : mySide==='v' ? 'Zuschauer · via PLC'
-                          : 'Zwei PCs · ein Brett · via PLC';
-  if(mySide==='v'){                          // Zuschauer verändern nichts
-    for(const id of ['newBtn','undoBtn']){
-      const b=document.getElementById(id); if(b) b.style.display='none';
-    }
-  }
+  Sync.ready=false;          // bis zum ersten Abgleich nichts überschreiben
+
+  const side=(params.get('side')||'').toLowerCase().charAt(0);
+  applySide(); showLobby();
+
   let busy=false;
   async function poll(){
     if(busy) return; busy=true;
-    try{ const remote=await read(); if(remote!==Sync.last) Sync.receive(remote); }catch(e){}
+    try{
+      const remote=await read();
+      const first=!Sync.ready;
+      if(first){ Sync.last=remote; const st=parseState(remote);
+                 seats.w=st.w; seats.b=st.b;
+                 if(st.moves) loadGame(st.moves);
+                 Sync.ready=true; render(); renderLobby();
+                 // Platz aus der URL erst jetzt belegen – Stand ist bekannt
+                 if(side==='w'||side==='b') takeSeat(side);
+                 else if(side==='v') watchOnly();
+      } else if(remote!==Sync.last){ Sync.receive(remote); }
+    }catch(e){}
     busy=false;
   }
   poll();                    // aktuellen Stand von der PLC übernehmen
   setInterval(poll,1000);    // danach ~1x pro Sekunde abgleichen
 }
+
+document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
+document.getElementById('seatB').addEventListener('click',()=>takeSeat('b'));
+document.getElementById('seatV').addEventListener('click',watchOnly);
+document.getElementById('resetSeats').addEventListener('click',resetSeats);
+leaveBtn.addEventListener('click',()=>leaveSeat(false));
 
 document.getElementById('newBtn').addEventListener('click',newGame);
 document.getElementById('undoBtn').addEventListener('click',undo);
