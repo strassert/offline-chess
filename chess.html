@@ -64,9 +64,16 @@
   .promo .p{font-size:52px; cursor:pointer; padding:4px 8px; border-radius:8px;}
   .promo .p:hover{background:#3a3f4a;}
   .players{margin:10px 0 4px;}
-  .players .pl{display:flex; align-items:center; gap:8px; padding:7px 10px; margin-bottom:6px;
+  .players .pl{padding:7px 10px; margin-bottom:6px;
     background:#1c1f26; border-radius:8px; font-size:13px;}
   .players .pl.turn{background:#243026; box-shadow:inset 0 0 0 1px rgba(111,174,95,.5);}
+  .players .plhead{display:flex; align-items:center; gap:8px;}
+  .players .cap{margin-top:4px; font-size:17px; line-height:1.2; word-break:break-all;
+    paint-order:stroke fill;}
+  .players .cap.white{color:#faf7ef; -webkit-text-stroke:1px #241206;}
+  .players .cap.black{color:#141414; -webkit-text-stroke:1px #9aa3b0;}
+  .players .adv{font-size:12px; font-weight:700; color:var(--accent);
+    -webkit-text-stroke:0; vertical-align:2px;}
   .players .dotc{width:12px; height:12px; border-radius:50%; border:1px solid #777; flex:0 0 auto;}
   .players .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .players .clk{font-family:Consolas,monospace; font-size:15px; font-weight:700;}
@@ -400,6 +407,7 @@ function render(){
   }
   boardEl.style.opacity = (mySide && mySide!==state.turn && legal.length) ? '.85' : '1';
   renderMoves();
+  renderPlayers();          // Namen, Uhren und geschlagene Figuren aktualisieren
 }
 
 function renderMoves(){
@@ -640,25 +648,62 @@ function tickClocks(){
 }
 setInterval(tickClocks,200);
 
+/* Geschlagene Figuren: was auf dem Brett gegenüber der Grundstellung fehlt */
+const VALUE={Q:9,R:5,B:3,N:3,P:1};
+function capturedBy(col){
+  const enemy=col==='w'?'b':'w';
+  const start={Q:1,R:2,B:2,N:2,P:8}, cur={Q:0,R:0,B:0,N:0,P:0};
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=state.board[r][c];
+    if(p&&p[0]===enemy&&cur[p[1]]!==undefined) cur[p[1]]++;
+  }
+  const out=[]; let pts=0;
+  for(const t of ['Q','R','B','N','P']){
+    const n=Math.max(0,start[t]-cur[t]);
+    for(let i=0;i<n;i++) out.push(t);
+    pts+=n*VALUE[t];
+  }
+  return {list:out, pts};
+}
+
 function renderPlayers(){
   const el=document.getElementById('players');
   if(!el) return;
-  if(!Sync.transport){ el.innerHTML=''; document.getElementById('specs').textContent=''; return; }
+  const plc=!!Sync.transport;
+  const capW=capturedBy('w'), capB=capturedBy('b');
   el.innerHTML='';
   for(const col of ['w','b']){
     const row=document.createElement('div');
-    row.className='pl'+(phase==='run'&&state.turn===col?' turn':'');
+    row.className='pl'+(col===state.turn&&(!plc||phase==='run')?' turn':'');
+    const head=document.createElement('div'); head.className='plhead';
     const dot=document.createElement('span'); dot.className='dotc';
     dot.style.background=col==='w'?'#f2efe7':'#111';
     const nm=document.createElement('span'); nm.className='nm';
-    nm.textContent=(names[col]||(seats[col]?'Spieler':'frei'))+(seats[col]===myId?' (du)':'');
-    const ck=document.createElement('span'); ck.className='clk';
-    const ms=liveClock(col); ck.textContent=fmtClock(ms);
-    if(phase==='run'&&ms<30000) ck.classList.add('low');
-    row.appendChild(dot); row.appendChild(nm); row.appendChild(ck);
+    nm.textContent = plc ? (names[col]||(seats[col]?'Spieler':'frei'))+(seats[col]===myId?' (du)':'')
+                         : (col==='w'?'Weiß':'Schwarz');
+    head.appendChild(dot); head.appendChild(nm);
+    if(plc){
+      const ck=document.createElement('span'); ck.className='clk';
+      const ms=liveClock(col); ck.textContent=fmtClock(ms);
+      if(phase==='run'&&ms<30000) ck.classList.add('low');
+      head.appendChild(ck);
+    }
+    row.appendChild(head);
+    // geschlagene Figuren dieses Spielers + Materialvorsprung
+    const cap=(col==='w')?capW:capB, diff=capW.pts-capB.pts;
+    const adv=(col==='w')?diff:-diff;
+    if(cap.list.length||adv>0){
+      const cw=document.createElement('div'); cw.className='cap';
+      cw.textContent=cap.list.map(t=>GLYPH[t]).join('');
+      cw.classList.add(col==='w'?'black':'white');   // erbeutete Farbe = Gegnerfarbe
+      if(adv>0){ const s=document.createElement('span'); s.className='adv';
+                 s.textContent=' +'+adv; cw.appendChild(s); }
+      row.appendChild(cw);
+    }
     el.appendChild(row);
   }
   const sp=document.getElementById('specs');
+  if(!plc){ sp.textContent=''; return; }
   sp.textContent = specs.length
     ? 'Zuschauer: '+specs.map(s=>s.name||'Gast').join(', ')
     : 'Keine Zuschauer';
@@ -666,10 +711,8 @@ function renderPlayers(){
   const canStart=(mySide==='w'||mySide==='b')&&seats.w&&seats.b&&phase!=='run';
   sb.style.display=canStart?'block':'none';
   sb.textContent=phase==='over'?'Neue Partie starten':'Spiel starten';
-  for(const r of ['tcRow2']){
-    const row=document.getElementById(r);
-    if(row) row.style.display=(canStart?'flex':'none');
-  }
+  const row2=document.getElementById('tcRow2');
+  if(row2) row2.style.display=canStart?'flex':'none';
   renderTC();
 }
 function renderTC(){
@@ -750,7 +793,13 @@ function takeSeat(col){
   if(!n){ lobbyMsg='Bitte zuerst einen Namen eingeben.'; renderLobby(); return; }
   dropMe();
   seats[col]=myId; names[col]=n; mySide=col; lobbyMsg='';
-  if(phase!=='run'){ const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now(); }
+  // Sitzt der Gegner noch in einer laufenden Partie, wird sie übernommen –
+  // sonst (Partie beendet oder verwaist) beginnt eine frische Aufstellung.
+  const takeover = phase==='run' && !!seats[col==='w'?'b':'w'];
+  if(!takeover){
+    newGameSilent(); phase='setup'; result='';
+    const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
+  }
   Sync.publish();
   hideLobby(); applySide();
   // Gleichzeitige Anmeldung: nach einem Abgleich prüfen, ob der Platz hält
@@ -775,7 +824,9 @@ function leaveSeat(lost){
 }
 function resetSeats(){
   seats.w=''; seats.b=''; names.w=''; names.b=''; specs=[];
-  phase='setup'; result=''; lobbyMsg=''; Sync.publish(); renderLobby();
+  newGameSilent(); phase='setup'; result='';
+  const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
+  lobbyMsg=''; Sync.publish(); render(); renderLobby(); renderPlayers();
 }
 
 /* ---------- PLC-Transport (zwei PCs, ein Brett) ----------
@@ -808,10 +859,9 @@ function setupPLC(){
     try{
       const remote=await read();
       const first=!Sync.ready;
-      if(first){ Sync.last=remote; const st=parseState(remote);
-                 seats.w=st.w; seats.b=st.b;
-                 if(st.moves) loadGame(st.moves);
-                 Sync.ready=true; render(); renderLobby();
+      if(first){ Sync.last=remote;
+                 applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
+                 Sync.ready=true; renderLobby();
                  // Platz aus der URL erst jetzt belegen – Stand ist bekannt
                  if(side==='w'||side==='b') takeSeat(side);
                  else if(side==='v') watchOnly();
