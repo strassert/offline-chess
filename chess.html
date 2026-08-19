@@ -63,7 +63,21 @@
   .promo .card{background:var(--panel); border-radius:12px; padding:16px; display:flex; gap:10px;}
   .promo .p{font-size:52px; cursor:pointer; padding:4px 8px; border-radius:8px;}
   .promo .p:hover{background:#3a3f4a;}
-  .seatinfo{margin-top:12px; font-size:12px; opacity:.65; text-align:center;}
+  .players{margin:10px 0 4px;}
+  .players .pl{display:flex; align-items:center; gap:8px; padding:7px 10px; margin-bottom:6px;
+    background:#1c1f26; border-radius:8px; font-size:13px;}
+  .players .pl.turn{background:#243026; box-shadow:inset 0 0 0 1px rgba(111,174,95,.5);}
+  .players .dotc{width:12px; height:12px; border-radius:50%; border:1px solid #777; flex:0 0 auto;}
+  .players .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .players .clk{font-family:Consolas,monospace; font-size:15px; font-weight:700;}
+  .players .clk.low{color:var(--check);}
+  .specs{margin-top:10px; font-size:12px; opacity:.6; line-height:1.5;}
+  .lobby input{width:100%; padding:10px 12px; margin-bottom:12px; font-size:14px;
+    border-radius:8px; border:1px solid #4a505c; background:#1c1f26; color:var(--text);}
+  .tcrow{display:flex; gap:8px; margin-bottom:14px;}
+  .tc{flex:1; padding:10px; border-radius:8px; border:1px solid #4a505c; cursor:pointer;
+    background:#1c1f26; color:var(--text); font-size:13px; font-weight:600;}
+  .tc.on{background:var(--accent); color:#0e1a09; border-color:var(--accent);}
   .lobby{position:fixed; inset:0; background:rgba(16,18,23,.88); display:none;
     align-items:center; justify-content:center; z-index:10;}
   .lobby.on{display:flex;}
@@ -87,18 +101,29 @@
     <h1>♟ Schach</h1>
     <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
     <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Weiß am Zug</span></div>
+    <div class="players" id="players"></div>
+    <div class="tcrow" id="tcRow2" style="display:none">
+      <button class="tc" data-tc="180+2">3 + 2</button>
+      <button class="tc" data-tc="600+0">10 Min</button>
+    </div>
+    <button class="btn" id="startBtn" style="display:none">Spiel starten</button>
     <button class="btn" id="newBtn">Neues Spiel</button>
     <button class="btn sec" id="undoBtn">Zug zurück</button>
     <button class="btn sec" id="flipBtn">Brett drehen</button>
     <button class="btn sec" id="leaveBtn" style="display:none">Platz freigeben</button>
-    <div class="seatinfo" id="seatInfo"></div>
+    <div class="specs" id="specs"></div>
     <div class="moves" id="moves"></div>
   </div>
 </div>
 <div class="lobby" id="lobby">
   <div class="card">
     <h2>♟ Schach</h2>
-    <p>Wähle deinen Platz</p>
+    <p>Name eingeben und Platz wählen</p>
+    <input id="nameInput" maxlength="12" placeholder="Dein Name" autocomplete="off">
+    <div class="tcrow" id="tcRow">
+      <button class="tc on" data-tc="180+2">3 + 2</button>
+      <button class="tc" data-tc="600+0">10 Min</button>
+    </div>
     <button class="btn" id="seatW">Weiß spielen</button>
     <button class="btn" id="seatB">Schwarz spielen</button>
     <button class="btn sec" id="seatV">Nur zuschauen</button>
@@ -135,8 +160,13 @@ function newGame(){
     halfmove:0, fullmove:1
   };
   history=[]; selected=null; legalCache=null;
+  if(Sync.transport){                    // im PLC-Betrieb zurück in die Aufstellung
+    phase='setup'; result='';
+    const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
+  }
   render();
   Sync.publish();
+  if(typeof renderPlayers==='function') renderPlayers();
 }
 
 const inside=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
@@ -351,9 +381,14 @@ function render(){
   const legal=currentLegal();
   const side=state.turn==='w'?'Weiß':'Schwarz';
   turnDot.style.background=state.turn==='w'?'#f2efe7':'#111';
-  if(legal.length===0){
+  if(Sync.transport && phase==='over' && result){
+    statusEl.textContent=result;
+  } else if(Sync.transport && phase==='setup'){
+    statusEl.textContent = (seats.w&&seats.b) ? 'Bereit – Spiel starten'
+                                              : 'Warte auf Mitspieler …';
+  } else if(legal.length===0){
     statusEl.textContent = checkNow
-      ? 'Schachmatt – '+(state.turn==='w'?'Schwarz':'Weiß')+' gewinnt!'
+      ? 'Schachmatt - '+(state.turn==='w'?'Schwarz':'Weiß')+' gewinnt!'
       : 'Patt – Remis.';
   } else if(mySide==='v'){
     statusEl.textContent = side+' am Zug'+(checkNow?' – Schach!':'');
@@ -384,6 +419,7 @@ function renderMoves(){
 function onSquare(r,c){
   if(currentLegal().length===0) return;   // Partie beendet
   if(mySide && mySide!==state.turn) return;   // fremde Farbe / Zuschauer
+  if(Sync.transport && phase!=='run') return; // Partie noch nicht gestartet / beendet
   const p=state.board[r][c];
   if(selected){
     const mv=currentLegal().find(m=>m.from.r===selected.r&&m.from.c===selected.c
@@ -414,7 +450,16 @@ function finishMove(mv,promo){
   const noMoves=legalMoves(state,state.turn).length===0;
   const h=history[history.length-1];
   if(noMoves&&chk) h.san+='#'; else if(chk) h.san+='+';
-  if(!Sync.suppress){ render(); Sync.publish(); }
+  if(!Sync.suppress){
+    const mover=(state.turn==='w')?'b':'w';        // wer gerade gezogen hat
+    chargeClock(mover);
+    if(Sync.transport&&noMoves){                   // Matt oder Patt beendet die Partie
+      phase='over';
+      result = chk ? 'Schachmatt - '+(names[mover]||(mover==='w'?'Weiß':'Schwarz'))+' gewinnt'
+                   : 'Patt - Remis';
+    }
+    render(); Sync.publish();
+  }
 }
 
 function askPromotion(col,cb){
@@ -481,16 +526,52 @@ function loadGame(str){
   Sync.suppress=false;
   selected=null; legalCache=null;
 }
-/* Gemeinsamer Zustand = Platzbelegung + Zugliste in einem String:
-   "<id-weiss>,<id-schwarz>|e2e4 e7e5".  Dadurch genügt eine einzige
-   SPS-Variable für Spielstand und Anmeldung. */
-const seats={w:'',b:''};
-function serializeState(){ return seats.w+','+seats.b+'|'+serializeGame(); }
+/* Gemeinsamer Zustand in EINER SPS-Variable:
+   "w=id:Name;b=id:Name;v=id:Name,id:Name;tc=180+2;tw=180000;tb=180000;st=run|e2e4 e7e5"
+   Kopf = Plätze, Namen, Zuschauer, Zeitmodus und Restzeiten; danach die Zugliste. */
+const seats={w:'',b:''};                   // Platz-Kennungen
+const names={w:'',b:''};                   // Spielernamen
+let specs=[];                              // Zuschauer [{id,name}]
+let tc='180+2';                            // Zeitmodus "Sekunden+Inkrement"
+let clock={w:0,b:0};                       // Restzeiten in ms
+let phase='setup';                         // setup | run | over
+let result='';                             // Ergebnistext bei phase==='over'
+
+const MAXSPECS=8;                          // Begrenzung, damit der String klein bleibt
+function clean(s){ return String(s||'').replace(/[;:,|=]/g,'').trim().slice(0,12); }
+function tcParts(){ const p=tc.split('+'); return {base:(+p[0]||180)*1000, inc:(+p[1]||0)*1000}; }
+
+function serializeState(){
+  const ent=(id,nm)=>id?(id+':'+nm):'';
+  const f=['w='+ent(seats.w,names.w), 'b='+ent(seats.b,names.b),
+           'v='+specs.slice(0,MAXSPECS).map(s=>s.id+':'+s.name).join(','),
+           'tc='+tc, 'tw='+Math.max(0,Math.round(clock.w)),
+           'tb='+Math.max(0,Math.round(clock.b)), 'st='+phase];
+  if(result) f.push('res='+result.replace(/[;|]/g,''));
+  return f.join(';')+'|'+serializeGame();
+}
 function parseState(str){
   const s=String(str||''), i=s.indexOf('|');
-  if(i<0) return {w:'',b:'',moves:s.trim()};      // altes Format: nur Züge
-  const head=s.slice(0,i).split(',');
-  return {w:(head[0]||'').trim(), b:(head[1]||'').trim(), moves:s.slice(i+1).trim()};
+  const out={w:'',b:'',nw:'',nb:'',specs:[],tc:'180+2',tw:0,tb:0,st:'setup',res:'',
+             moves:i<0?s.trim():s.slice(i+1).trim()};
+  if(i<0) return out;                              // ganz altes Format: nur Züge
+  const head=s.slice(0,i);
+  if(head.indexOf('=')<0){                         // Vorversion: "<id-w>,<id-b>"
+    const p=head.split(','); out.w=(p[0]||'').trim(); out.b=(p[1]||'').trim(); return out;
+  }
+  for(const part of head.split(';')){
+    const k=part.slice(0,part.indexOf('=')), v=part.slice(part.indexOf('=')+1);
+    if(k==='w'||k==='b'){ const c=v.split(':');
+      out[k]=(c[0]||'').trim(); out['n'+k]=(c[1]||'').trim(); }
+    else if(k==='v'){ out.specs=v?v.split(',').filter(Boolean).map(e=>{
+      const c=e.split(':'); return {id:(c[0]||'').trim(), name:(c[1]||'').trim()}; }):[]; }
+    else if(k==='tc') out.tc=v||'180+2';
+    else if(k==='tw') out.tw=+v||0;
+    else if(k==='tb') out.tb=+v||0;
+    else if(k==='st') out.st=v||'setup';
+    else if(k==='res') out.res=v||'';
+  }
+  return out;
 }
 const Sync={
   transport:null, suppress:false, last:null,
@@ -500,15 +581,107 @@ const Sync={
   receive(str){
     if(str===this.last) return;                   // eigener Echo -> ignorieren
     this.last=str;
-    const st=parseState(str);
-    seats.w=st.w; seats.b=st.b;
-    if(st.moves!==serializeGame()) loadGame(st.moves);
-    if(mySide==='w'&&seats.w!==myId) leaveSeat(true);       // Platz verloren
-    else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
-    render(); renderLobby();
+    applyState(parseState(str));
   }
 };
+// Übernimmt einen empfangenen Zustand vollständig
+function applyState(st){
+  seats.w=st.w; seats.b=st.b; names.w=st.nw; names.b=st.nb;
+  specs=st.specs; tc=st.tc; phase=st.st; result=st.res;
+  clock.w=st.tw; clock.b=st.tb; clockAt=Date.now();   // Basis fürs lokale Ticken
+  if(st.moves!==serializeGame()) loadGame(st.moves);
+  if(mySide==='w'&&seats.w!==myId) leaveSeat(true);        // Platz verloren
+  else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
+  render(); renderLobby();
+}
 window.ChessSync=Sync;             // Zugriffspunkt für externe Transports
+
+/* ---------- Schachuhr ----------
+   Nur die Seite am Zug verbraucht Zeit. Jeder Client zählt lokal ab dem
+   Moment herunter, in dem er den Zustand empfangen hat (clockAt) – dadurch
+   ist keine Uhrzeit-Synchronisation zwischen den PCs nötig. Verbindlich
+   rechnet der Spieler ab, der zieht: er schreibt seine neue Restzeit mit. */
+let clockAt=Date.now();
+function liveClock(col){
+  if(phase!=='run'||col!==state.turn) return clock[col];
+  return clock[col]-(Date.now()-clockAt);
+}
+function fmtClock(ms){
+  if(ms<0) ms=0;
+  const t=Math.ceil(ms/1000), m=Math.floor(t/60), s=t%60;
+  return m+':'+(s<10?'0':'')+s;
+}
+function chargeClock(col){                  // Zeit des ziehenden Spielers abrechnen
+  if(phase!=='run') return;
+  const now=Date.now();
+  clock[col]=Math.max(0,clock[col]-(now-clockAt))+tcParts().inc;
+  clockAt=now;
+}
+function startGame(){
+  const b=tcParts().base;
+  clock={w:b,b:b}; clockAt=Date.now(); phase='run'; result='';
+  newGameSilent(); render(); renderLobby(); Sync.publish();
+}
+function endGame(text){
+  phase='over'; result=text; render(); renderLobby(); Sync.publish();
+}
+function tickClocks(){
+  if(!Sync.transport) return;
+  renderPlayers();
+  if(phase!=='run') return;
+  const t=state.turn, left=liveClock(t);
+  if(left>0) return;
+  // Der Spieler am Zug meldet selbst; ist sein PC weg, meldet der Gegner nach 5 s
+  const iMove=(mySide===t), iWait=(mySide&&mySide!=='v'&&mySide!==t&&left<=-5000);
+  if(iMove||iWait){
+    clock[t]=0;
+    endGame('Zeit abgelaufen - '+(t==='w'?names.b||'Schwarz':names.w||'Weiß')+' gewinnt');
+  }
+}
+setInterval(tickClocks,200);
+
+function renderPlayers(){
+  const el=document.getElementById('players');
+  if(!el) return;
+  if(!Sync.transport){ el.innerHTML=''; document.getElementById('specs').textContent=''; return; }
+  el.innerHTML='';
+  for(const col of ['w','b']){
+    const row=document.createElement('div');
+    row.className='pl'+(phase==='run'&&state.turn===col?' turn':'');
+    const dot=document.createElement('span'); dot.className='dotc';
+    dot.style.background=col==='w'?'#f2efe7':'#111';
+    const nm=document.createElement('span'); nm.className='nm';
+    nm.textContent=(names[col]||(seats[col]?'Spieler':'frei'))+(seats[col]===myId?' (du)':'');
+    const ck=document.createElement('span'); ck.className='clk';
+    const ms=liveClock(col); ck.textContent=fmtClock(ms);
+    if(phase==='run'&&ms<30000) ck.classList.add('low');
+    row.appendChild(dot); row.appendChild(nm); row.appendChild(ck);
+    el.appendChild(row);
+  }
+  const sp=document.getElementById('specs');
+  sp.textContent = specs.length
+    ? 'Zuschauer: '+specs.map(s=>s.name||'Gast').join(', ')
+    : 'Keine Zuschauer';
+  const sb=document.getElementById('startBtn');
+  const canStart=(mySide==='w'||mySide==='b')&&seats.w&&seats.b&&phase!=='run';
+  sb.style.display=canStart?'block':'none';
+  sb.textContent=phase==='over'?'Neue Partie starten':'Spiel starten';
+  for(const r of ['tcRow2']){
+    const row=document.getElementById(r);
+    if(row) row.style.display=(canStart?'flex':'none');
+  }
+  renderTC();
+}
+function renderTC(){
+  for(const btn of document.querySelectorAll('.tc'))
+    btn.classList.toggle('on',btn.dataset.tc===tc);
+}
+function setTC(v){
+  if(phase==='run') return;
+  tc=v; const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
+  renderTC(); renderPlayers();
+  if(mySide==='w'||mySide==='b') Sync.publish();
+}
 
 /* ---------- Lobby: Platz wählen oder zuschauen ---------- */
 // Kennung dieses Browsers; übersteht Reload, damit der Platz erhalten bleibt.
@@ -560,12 +733,24 @@ function applySide(){
   for(const id of ['newBtn','undoBtn']){
     const b=document.getElementById(id); if(b) b.style.display=hide?'none':'block';
   }
-  render(); renderLobby();
+  render(); renderLobby(); renderPlayers();
 }
+
+function myName(){
+  const el=document.getElementById('nameInput');
+  const n=clean(el&&el.value);
+  if(n){ try{ sessionStorage.setItem('chessName',n); }catch(e){} }
+  return n;
+}
+function dropMe(){ specs=specs.filter(s=>s.id!==myId); }
 
 function takeSeat(col){
   if(!seatFree(col)){ lobbyMsg='Platz ist bereits belegt.'; renderLobby(); return; }
-  seats[col]=myId; mySide=col; lobbyMsg='';
+  const n=myName();
+  if(!n){ lobbyMsg='Bitte zuerst einen Namen eingeben.'; renderLobby(); return; }
+  dropMe();
+  seats[col]=myId; names[col]=n; mySide=col; lobbyMsg='';
+  if(phase!=='run'){ const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now(); }
   Sync.publish();
   hideLobby(); applySide();
   // Gleichzeitige Anmeldung: nach einem Abgleich prüfen, ob der Platz hält
@@ -575,14 +760,23 @@ function takeSeat(col){
     }
   },2500);
 }
-function watchOnly(){ mySide='v'; hideLobby(); applySide(); }
+function watchOnly(){
+  const n=myName();
+  if(!n){ lobbyMsg='Bitte zuerst einen Namen eingeben.'; renderLobby(); return; }
+  dropMe();
+  if(specs.length<MAXSPECS) specs.push({id:myId,name:n});
+  mySide='v'; lobbyMsg=''; Sync.publish(); hideLobby(); applySide();
+}
 function leaveSeat(lost){
   if(mySide==='w'||mySide==='b'){
-    if(seats[mySide]===myId){ seats[mySide]=''; if(!lost) Sync.publish(); }
-  }
+    if(seats[mySide]===myId){ seats[mySide]=''; names[mySide]=''; if(!lost) Sync.publish(); }
+  } else if(mySide==='v'){ dropMe(); Sync.publish(); }
   mySide=null; applySide(); showLobby();
 }
-function resetSeats(){ seats.w=''; seats.b=''; lobbyMsg=''; Sync.publish(); renderLobby(); }
+function resetSeats(){
+  seats.w=''; seats.b=''; names.w=''; names.b=''; specs=[];
+  phase='setup'; result=''; lobbyMsg=''; Sync.publish(); renderLobby();
+}
 
 /* ---------- PLC-Transport (zwei PCs, ein Brett) ----------
    Synchronisiert über eine STRING-Variable der Steuerung, gelesen/geschrieben
@@ -628,6 +822,12 @@ function setupPLC(){
   poll();                    // aktuellen Stand von der PLC übernehmen
   setInterval(poll,1000);    // danach ~1x pro Sekunde abgleichen
 }
+
+try{ const n=sessionStorage.getItem('chessName');
+     if(n) document.getElementById('nameInput').value=n; }catch(e){}
+for(const btn of document.querySelectorAll('.tc'))
+  btn.addEventListener('click',()=>setTC(btn.dataset.tc));
+document.getElementById('startBtn').addEventListener('click',startGame);
 
 document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
 document.getElementById('seatB').addEventListener('click',()=>takeSeat('b'));
