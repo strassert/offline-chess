@@ -88,6 +88,10 @@
   .evalhead #evalDepth{font-size:11px; opacity:.5;}
   .evalpv{margin-top:3px; font-family:Consolas,monospace; font-size:11px; opacity:.7;
     line-height:1.4; min-height:15px;}
+  .evallast{margin-top:6px; font-size:12px; font-weight:700; min-height:16px;}
+  .q-best{color:#7fd88f;} .q-good{color:#9fd3a6;} .q-inac{color:#f0c14b;}
+  .q-mist{color:#f09145;} .q-blun{color:#ff6b6b;}
+  .moves .q{font-weight:700;}
   .lobby input{width:100%; padding:10px 12px; margin-bottom:12px; font-size:14px;
     border-radius:8px; border:1px solid #4a505c; background:#1c1f26; color:var(--text);}
   .tcrow{display:flex; gap:8px; margin-bottom:14px;}
@@ -131,6 +135,7 @@
       <div class="evalbar"><div class="fill" id="evalFill"></div></div>
       <div class="evalhead"><span id="evalScore">…</span><span id="evalDepth"></span></div>
       <div class="evalpv" id="evalPv"></div>
+      <div class="evallast" id="evalLast"></div>
     </div>
     <div class="specs" id="specs"></div>
     <div class="moves" id="moves"></div>
@@ -425,15 +430,22 @@ function render(){
   updateEval();             // Zuschauer: Bewertung zur neuen Stellung
 }
 
+// Ein Zug in der Liste, ggf. mit Einstufungs-Symbol der Analyse
+function moveSpan(i){
+  const el=document.createElement('span');
+  el.textContent=history[i].san;
+  const q=quality[i];
+  if(q&&q.s){ const s=document.createElement('span');
+              s.className='q '+q.c; s.textContent=q.s; el.appendChild(s); }
+  return el;
+}
 function renderMoves(){
   movesEl.innerHTML='';
   for(let i=0;i<history.length;i+=2){
     const row=document.createElement('div');
     const n=document.createElement('span'); n.className='n'; n.textContent=(i/2+1)+'.';
-    const w=document.createElement('span'); w.textContent=history[i].san;
-    row.appendChild(n); row.appendChild(w);
-    if(history[i+1]){ const b=document.createElement('span'); b.textContent=history[i+1].san;
-                      row.appendChild(b); }
+    row.appendChild(n); row.appendChild(moveSpan(i));
+    if(history[i+1]) row.appendChild(moveSpan(i+1));
     movesEl.appendChild(row);
   }
   movesEl.scrollTop=movesEl.scrollHeight;
@@ -746,6 +758,21 @@ function setTC(v){
    die Dateien, bleibt die Anzeige einfach aus – das Spiel läuft normal. */
 const ENGINE_FILE='stockfish-18-lite-single.js';
 let sf=null, sfReady=false, sfSeen='', sfOff=false;
+// Zugbewertung: Bewertung vor dem Zug gegen die nach dem Zug halten
+const RATE_DEPTH=13;                 // ab dieser Tiefe gilt ein Wert als belastbar
+let evalCur={moves:null,cp:null};    // laufende Analyse (cp aus Weiß-Sicht)
+let evalPrev=null;                   // Bewertung der Vorgängerstellung
+let quality=[];                      // Einstufung je Halbzug
+function scoreCp(sc){                // Matt in eine Zentibauern-Zahl übersetzen
+  return sc.mate!==undefined ? (sc.mate>0?1:-1)*(10000-Math.abs(sc.mate)*10) : sc.cp;
+}
+function classify(loss){
+  if(loss<20)  return {t:'Bester Zug', s:'',   c:'q-best'};
+  if(loss<50)  return {t:'Gut',        s:'',   c:'q-good'};
+  if(loss<100) return {t:'Ungenau',    s:'?!', c:'q-inac'};
+  if(loss<200) return {t:'Fehler',     s:'?',  c:'q-mist'};
+  return             {t:'Grober Fehler',s:'??',c:'q-blun'};
+}
 
 function engineOn(){
   if(sf||sfOff) return;
@@ -766,7 +793,28 @@ function onEngine(line){
   const pv=line.slice(line.indexOf(' pv ')+4).trim().split(/\s+/);
   // Werte kommen aus Sicht der Seite am Zug -> auf Weiß-Sicht drehen
   const sign=(state.turn==='w')?1:-1;
-  showEval(mate?{mate:sign*(+mate[1])}:cp?{cp:sign*(+cp[1])}:null, dep?+dep[1]:0, pv);
+  const sc=mate?{mate:sign*(+mate[1])}:cp?{cp:sign*(+cp[1])}:null;
+  const depth=dep?+dep[1]:0;
+  if(sc){ evalCur.cp=scoreCp(sc); if(depth>=RATE_DEPTH) rateLastMove(); }
+  showEval(sc,depth,pv);
+}
+// Den zuletzt gespielten Zug einstufen, sobald die neue Stellung bewertet ist
+function rateLastMove(){
+  const i=history.length-1;
+  if(i<0||!evalPrev||quality[i]) return;
+  const mover=(state.turn==='w')?'b':'w';          // wer gerade gezogen hat
+  const before=evalPrev.cp, after=evalCur.cp;
+  const loss=(mover==='w')?(before-after):(after-before);
+  quality[i]=classify(Math.max(0,loss));
+  quality[i].san=history[i].san;
+  renderMoves(); showLastQuality();
+}
+function showLastQuality(){
+  const el=document.getElementById('evalLast');
+  if(!el) return;
+  const q=quality[history.length-1];
+  el.className='evallast'+(q?' '+q.c:'');
+  el.textContent=q?('Letzter Zug: '+q.san+' – '+q.t):'';
 }
 function showEval(sc,depth,pv){
   const box=document.getElementById('evalBox');
@@ -804,7 +852,20 @@ function analyse(force){
   if(!sf||!sfReady) return;
   const moves=serializeGame();
   if(!force && moves===sfSeen) return;
+  // Ist die neue Stellung genau einen Zug weiter, dient die bisherige
+  // Bewertung als Referenz für die Einstufung dieses Zuges.
+  const prev=evalCur.moves;
+  let oneMore=false;
+  if(prev!==null && moves!==prev){
+    oneMore = prev==='' ? (moves!==''&&moves.indexOf(' ')<0)
+                        : (moves.indexOf(prev+' ')===0 &&
+                           moves.slice(prev.length+1).indexOf(' ')<0);
+  }
+  evalPrev=(oneMore&&evalCur.cp!==null)?{cp:evalCur.cp}:null;
+  if(prev!==null && moves!==prev && !oneMore) quality=[];   // neues Spiel / Rücknahme
+  evalCur={moves,cp:null};
   sfSeen=moves;
+  showLastQuality();
   if(currentLegal().length===0){                   // Partie vorbei -> nichts rechnen
     document.getElementById('evalPv').textContent='';
     document.getElementById('evalDepth').textContent='';
