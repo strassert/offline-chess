@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>B&R Goform PV-Test</title>
+<style>
+  body{font-family:Segoe UI,Arial,sans-serif;margin:20px;background:#f4f4f4;color:#222;}
+  h1{font-size:20px;}
+  .row{margin:8px 0;}
+  input{padding:6px 8px;font-size:14px;}
+  button{padding:10px 16px;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;}
+  table{border-collapse:collapse;width:100%;margin-top:16px;background:#fff;}
+  th,td{border:1px solid #ccc;padding:6px 8px;font-size:13px;vertical-align:top;text-align:left;}
+  th{background:#e8e8e8;}
+  td.ok{background:#d7f5d7;} td.bad{background:#f7d7d7;}
+  code{font-family:Consolas,monospace;word-break:break-all;}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;}
+</style>
+</head>
+<body>
+<h1>B&R AR-Webserver – Goform ReadWrite Test</h1>
+<div class="row">PV-Name: <input id="pv" value="gChessState" size="24"></div>
+<div class="row">Test-Wert: <input id="val" value="test123" size="24"></div>
+<div class="row">Rückgabeseite (ReturnPage): <input id="ret" value="/pvtest.html" size="24"></div>
+<button id="run">Alle Varianten testen</button>
+<table id="out"><thead><tr>
+  <th>#</th><th>Variante</th><th>Methode</th><th>Anfrage</th>
+  <th>Status</th><th>final URL</th><th>Antwort (Anfang)</th>
+</tr></thead><tbody></tbody></table>
+
+<script>
+"use strict";
+const tb=document.querySelector('#out tbody');
+const enc=encodeURIComponent;
+
+function addRow(i,label,method,req){
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td>${i}</td><td>${label}</td><td>${method}</td>`+
+    `<td><code>${req}</code></td><td class="s">…</td><td class="u"></td><td class="b"></td>`;
+  tb.appendChild(tr); return tr;
+}
+function fill(tr,status,url,body,ok){
+  tr.querySelector('.s').textContent=status;
+  tr.querySelector('.s').className='s '+(ok?'ok':'bad');
+  tr.querySelector('.u').innerHTML='<code>'+(url||'')+'</code>';
+  tr.querySelector('.b').innerHTML='<pre>'+(body||'').slice(0,300)
+    .replace(/</g,'&lt;')+'</pre>';
+}
+async function attempt(tr,method,url,body){
+  try{
+    const opt={method,redirect:'follow'};
+    if(body!=null){ opt.headers={'Content-Type':'application/x-www-form-urlencoded'};
+                    opt.body=body; }
+    const r=await fetch(url,opt);
+    const txt=await r.text();
+    fill(tr,r.status+' '+r.statusText,r.url,txt,r.ok);
+  }catch(e){ fill(tr,'FETCH-FEHLER',' ',String(e),false); }
+}
+
+document.getElementById('run').addEventListener('click',async()=>{
+  tb.innerHTML='';
+  const pv=document.getElementById('pv').value.trim();
+  const val=document.getElementById('val').value;
+  const ret=document.getElementById('ret').value.trim();
+  const G='/goform/ReadWrite';
+  let i=0;
+  const tests=[
+    // [label, method, url, body]
+    ['GET variable/value',        'GET',  `${G}?variable=${enc(pv)}&value=${enc(val)}`, null],
+    ['GET variable/value + Ret',  'GET',  `${G}?variable=${enc(pv)}&value=${enc(val)}&ReturnPage=${enc(ret)}`, null],
+    ['POST variable/value',       'POST', G, `variable=${enc(pv)}&value=${enc(val)}`],
+    ['POST variable/value + Ret', 'POST', G, `variable=${enc(pv)}&value=${enc(val)}&ReturnPage=${enc(ret)}`],
+    ['GET  <pv>=<val>',           'GET',  `${G}?${enc(pv)}=${enc(val)}`, null],
+    ['POST <pv>=<val>',           'POST', G, `${enc(pv)}=${enc(val)}`],
+    ['GET  read (nur variable)',  'GET',  `${G}?variable=${enc(pv)}`, null],
+    ['GET  read <pv>= (leer)',    'GET',  `${G}?${enc(pv)}=`, null],
+  ];
+  for(const [label,method,url,body] of tests){
+    const req = body!=null ? url+'  ['+body+']' : url;
+    const tr=addRow(++i,label,method,req);
+    await attempt(tr,method,url,body);
+  }
+});
+</script>
+</body>
+</html>

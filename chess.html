@@ -454,20 +454,53 @@ const Sync={
   receive(str){ if(str===this.last) return;   // eigener Echo -> ignorieren
              this.last=str; loadGame(str); render(); }
 };
-window.ChessSync=Sync;             // Zugriffspunkt für das mapp-View-Widget
+window.ChessSync=Sync;             // Zugriffspunkt für externe Transports
 
-// Lokales Demo: zwei Browser-Tabs synchron (URL mit ?demo öffnen)
-if(location.search.indexOf('demo')>=0 && 'BroadcastChannel' in window){
-  const bc=new BroadcastChannel('chess-sync');
-  Sync.transport={ send:(s)=>bc.postMessage(s) };
-  bc.onmessage=(e)=>Sync.receive(e.data);
+/* ---------- PLC-Transport (zwei PCs, ein Brett) ----------
+   Synchronisiert über eine STRING-Variable der Steuerung, gelesen/geschrieben
+   über den B&R-AR-Webserver (goform/ReadWrite, Format aus PV_Access.js).
+   Voraussetzung: response.asp liegt im Webverzeichnis (web\).
+   Aktivierung mit ?plc in der URL; PV-Name via ?pv=... (Default gChessState). */
+function setupPLC(){
+  const params=new URLSearchParams(location.search);
+  const pv=params.get('pv')||'gChessState';
+  const G='/goform/ReadWrite';
+  const body=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(pv)+tail;
+  async function write(val){
+    try{ await fetch(G,{method:'POST',body:body('&value='+encodeURIComponent(val)+'&write=1')}); }
+    catch(e){/* Netzwerk-Hänger ignorieren, Spiel läuft lokal weiter */}
+  }
+  async function read(){
+    const r=await fetch(G,{method:'POST',body:body('&value=none&read=1')});
+    return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
+  }
+  Sync.transport={ send:write };
+  const sub=document.querySelector('.sub'); if(sub) sub.textContent='Zwei PCs · ein Brett · via PLC';
+  let busy=false;
+  async function poll(){
+    if(busy) return; busy=true;
+    try{ const remote=await read(); if(remote!==Sync.last) Sync.receive(remote); }catch(e){}
+    busy=false;
+  }
+  poll();                    // aktuellen Stand von der PLC übernehmen
+  setInterval(poll,1000);    // danach ~1x pro Sekunde abgleichen
 }
 
 document.getElementById('newBtn').addEventListener('click',newGame);
 document.getElementById('undoBtn').addEventListener('click',undo);
 document.getElementById('flipBtn').addEventListener('click',()=>{flipped=!flipped;render();});
 
-newGame();
+newGame();                   // frisches Brett – Transport hängt noch nicht -> kein Publish
+
+// Transport nach newGame() wählen, damit der Start keinen Reset an den Peer sendet
+const _q=location.search;
+if(_q.indexOf('plc')>=0){
+  setupPLC();
+} else if(_q.indexOf('demo')>=0 && 'BroadcastChannel' in window){
+  const bc=new BroadcastChannel('chess-sync');
+  Sync.transport={ send:(s)=>bc.postMessage(s) };
+  bc.onmessage=(e)=>Sync.receive(e.data);
+}
 </script>
 </body>
 </html>
