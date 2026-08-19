@@ -43,19 +43,46 @@ Die Betriebsart wird über die URL gewählt:
 
 ### Lobby
 
-Alle Beteiligten öffnen denselben Link. Die Lobby zeigt, welche Plätze frei
-sind; ein belegter Platz ist ausgegraut. Wer einen Platz hat, kann ihn über
-*Platz freigeben* wieder abgeben, Zuschauer können über *Platz wählen*
-zurück zur Auswahl. Falls ein Platz hängen bleibt (z. B. PC ausgeschaltet),
-gibt *Plätze zurücksetzen* beide Plätze frei.
+Alle Beteiligten öffnen denselben Link. In der Lobby wird ein **Name**
+eingegeben und danach ein Platz gewählt; belegte Plätze sind ausgegraut.
+Wer einen Platz hat, kann ihn über *Platz freigeben* abgeben, Zuschauer
+kommen über *Platz wählen* zurück zur Auswahl. Falls ein Platz hängen
+bleibt (z. B. PC ausgeschaltet), gibt *Plätze zurücksetzen* alles frei.
 
-Ein Spieler kann nur ziehen, wenn seine Farbe am Zug ist; die Statuszeile
-zeigt „Du bist am Zug" bzw. „Gegner am Zug". Schwarz sieht das Brett
-gedreht. Zuschauer können nicht ziehen und die Partie nicht zurücksetzen.
+### Bedenkzeit
 
-Die Platzbelegung liegt zusammen mit dem Spielstand in derselben
-SPS-Variable (`<id-weiß>,<id-schwarz>|<zugliste>`) – es wird also **keine
-zweite Variable** benötigt.
+Vor dem Start wählen die Spieler den Modus **3 + 2** (3 Minuten plus
+2 Sekunden pro Zug) oder **10 Min** (ohne Inkrement). Das Brett bleibt
+gesperrt, bis ein Spieler *Spiel starten* drückt. Läuft eine Uhr ab, endet
+die Partie und das Ergebnis wird allen angezeigt – ebenso bei Schachmatt
+oder Patt.
+
+Es zählt nur die Uhr der Seite am Zug. Jeder Client zählt lokal ab dem
+Empfang des Zustands herunter, verbindlich rechnet der ziehende Spieler ab.
+Dadurch ist keine Uhrzeit-Synchronisation zwischen den PCs nötig; pro Zug
+kann die Anzeige um die Abfragezeit (max. 1 s) abweichen.
+
+### Anzeige im Spiel
+
+Das Seitenpanel zeigt beide Spieler mit Namen und Restzeit (die Seite am
+Zug ist hervorgehoben, unter 30 s wird die Uhr rot) sowie die Namen aller
+Zuschauer. Ein Spieler kann nur ziehen, wenn seine Farbe am Zug ist;
+Schwarz sieht das Brett gedreht.
+
+### Platzbedarf in der SPS-Variable
+
+Plätze, Namen, Zuschauer, Zeitmodus, Restzeiten und Zugliste liegen
+gemeinsam in **einer** Variable:
+
+```
+w=<id>:<Name>;b=<id>:<Name>;v=<id>:<Name>,…;tc=180+2;tw=<ms>;tb=<ms>;st=run;res=…|e2e4 e7e5
+```
+
+Der Kopf ist rund 120 Zeichen lang, je Zuschauer kommen ~20 dazu (maximal
+8 Zuschauer werden übertragen), die Zugliste wächst um ~5 Zeichen pro Zug.
+Für eine lange Partie mit mehreren Zuschauern sollte die Variable daher
+großzügig dimensioniert sein – `STRING[1000]` reicht für etwa 60 Züge mit
+voller Zuschauerliste, für längere Partien entsprechend größer wählen.
 
 ### Voraussetzungen für `?plc`
 
