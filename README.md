@@ -92,6 +92,25 @@ die Dateien nicht aus:
 Fehlen die Dateien oder die MIME-Einträge, bleibt die Analyse einfach aus –
 das Spiel funktioniert unverändert weiter.
 
+#### Zugbewertung
+
+Jeder Zug wird eingestuft, indem die Bewertung vor dem Zug gegen die
+Bewertung danach gehalten wird (aus Sicht des Ziehenden). Der Verlust in
+Zentibauern ergibt die Einstufung:
+
+| Verlust | Einstufung | Symbol |
+|---------|------------|--------|
+| < 20 | Bester Zug | – |
+| < 50 | Gut | – |
+| < 100 | Ungenau | `?!` |
+| < 200 | Fehler | `?` |
+| ab 200 | Grober Fehler | `??` |
+
+Die Einstufung des letzten Zuges steht unter der Bewertung, die Zugliste
+markiert Ungenauigkeiten und schlechter farbig. Bewertet wird nur, solange
+die Partie Zug für Zug fortschreitet – wer mitten im Spiel als Zuschauer
+dazukommt, sieht Einstufungen erst ab seinem Beitritt.
+
 ### Platzbedarf in der SPS-Variable
 
 Plätze, Namen, Zuschauer, Zeitmodus, Restzeiten und Zugliste liegen
