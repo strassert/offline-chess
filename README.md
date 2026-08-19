@@ -35,17 +35,27 @@ Die Betriebsart wird über die URL gewählt:
 
 | URL | Verhalten |
 |-----|-----------|
-| `chess.html` | Standalone. Zwei Personen spielen abwechselnd an einem Bildschirm (Hotseat). |
-| `chess.html?plc&side=w` | **PC 1:** spielt Weiß. |
-| `chess.html?plc&side=b` | **PC 2:** spielt Schwarz, Brett automatisch gedreht. |
-| `chess.html?plc&side=v` | Zuschauer: sieht live zu, kann nicht ziehen. |
-| `chess.html?plc` | Zwei PCs, ein Brett – aber ohne Farbzuordnung, jeder darf beide Farben ziehen. |
+| `chess.html?plc` | **Der Link für alle.** Beim Öffnen erscheint die Lobby: Weiß, Schwarz oder zuschauen. |
+| `chess.html` | Standalone ohne Steuerung. Zwei Personen spielen abwechselnd an einem Bildschirm. |
+| `chess.html?plc&side=w` | Überspringt die Lobby und belegt direkt Weiß (`b` = Schwarz, `v` = Zuschauer). |
 | `chess.html?plc&pv=meineVar` | Abweichender PV-Name (Default: `gChessState`). |
 | `chess.html?demo` | Synchronisation zwischen zwei Tabs desselben Browsers (nur zum Testen). |
 
-Ohne `side` steuert jeder Client beide Farben. Mit `side` kann ein Client
-nur ziehen, wenn seine Farbe am Zug ist; die Statuszeile zeigt „Du bist am
-Zug" bzw. „Gegner am Zug".
+### Lobby
+
+Alle Beteiligten öffnen denselben Link. Die Lobby zeigt, welche Plätze frei
+sind; ein belegter Platz ist ausgegraut. Wer einen Platz hat, kann ihn über
+*Platz freigeben* wieder abgeben, Zuschauer können über *Platz wählen*
+zurück zur Auswahl. Falls ein Platz hängen bleibt (z. B. PC ausgeschaltet),
+gibt *Plätze zurücksetzen* beide Plätze frei.
+
+Ein Spieler kann nur ziehen, wenn seine Farbe am Zug ist; die Statuszeile
+zeigt „Du bist am Zug" bzw. „Gegner am Zug". Schwarz sieht das Brett
+gedreht. Zuschauer können nicht ziehen und die Partie nicht zurücksetzen.
+
+Die Platzbelegung liegt zusammen mit dem Spielstand in derselben
+SPS-Variable (`<id-weiß>,<id-schwarz>|<zugliste>`) – es wird also **keine
+zweite Variable** benötigt.
 
 ### Voraussetzungen für `?plc`
 
