@@ -9,6 +9,8 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 |-------|-------|
 | `chess.html` | Das Spiel – vollständige Schachregeln, Zugliste, Undo, Brett drehen |
 | `response.asp` | Rückgabeseite für den Goform-Zugriff (**nur für PLC-Sync nötig**) |
+| `stockfish-18-lite-single.js` | Stockfish-Engine (Loader, 21 KB) – **nur für die Zuschauer-Analyse** |
+| `stockfish-18-lite-single.wasm` | Stockfish-Engine (7,3 MB) – dito |
 | `PV_Access.js` | B&R-Original-Bibliothek für PV-Zugriff (Referenz; `chess.html` bringt die Logik selbst mit) |
 | `pvtest.html` | Diagnoseseite, die verschiedene Goform-Request-Formate durchprobiert |
 
@@ -68,6 +70,27 @@ Das Seitenpanel zeigt beide Spieler mit Namen und Restzeit (die Seite am
 Zug ist hervorgehoben, unter 30 s wird die Uhr rot) sowie die Namen aller
 Zuschauer. Ein Spieler kann nur ziehen, wenn seine Farbe am Zug ist;
 Schwarz sieht das Brett gedreht.
+
+### Stellungsbewertung für Zuschauer
+
+Wer als Zuschauer beitritt, sieht zusätzlich einen Bewertungsbalken, die
+Bewertung aus Sicht von Weiß (z. B. `+0.56`, bei Matt `+M3`) und die
+Hauptvariante. Gerechnet wird mit **Stockfish 18 lite** (single-threaded)
+in einem Web Worker – lokal im Browser, ohne Internetverbindung. Spieler
+sehen die Analyse nicht.
+
+Dafür müssen `stockfish-18-lite-single.js` und
+`stockfish-18-lite-single.wasm` neben `chess.html` im `web\`-Verzeichnis
+liegen. Zusätzlich sind **MIME-Types** nötig, sonst liefert der AR-Webserver
+die Dateien nicht aus:
+
+| File extension | MIME Type |
+|----------------|-----------|
+| `js` | `application/javascript` |
+| `wasm` | `application/wasm` |
+
+Fehlen die Dateien oder die MIME-Einträge, bleibt die Analyse einfach aus –
+das Spiel funktioniert unverändert weiter.
 
 ### Platzbedarf in der SPS-Variable
 
