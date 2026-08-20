@@ -92,19 +92,34 @@ die Dateien nicht aus:
 Fehlen die Dateien oder die MIME-Einträge, bleibt die Analyse einfach aus –
 das Spiel funktioniert unverändert weiter.
 
+#### Auswertung nach der Partie
+
+Sobald eine Partie endet, analysiert **jeder** Client die komplette Partie
+neu und zeigt eine Auswertung: Ergebnis, Bewertungsverlauf als Diagramm,
+Genauigkeit beider Spieler und die Aufschlüsselung der Züge nach Qualität.
+Auch Spieler bekommen sie – die Engine startet erst nach Spielende, hilft
+also während der Partie niemandem. Über *Auswertung* im Seitenpanel lässt
+sie sich erneut öffnen.
+
+Gerechnet wird mit Suchtiefe 14; eine Partie über 33 Halbzüge braucht auf
+einem normalen PC rund drei Sekunden, auf schwächerer Panel-Hardware
+entsprechend länger (der Fortschritt wird angezeigt).
+
 #### Zugbewertung
 
 Jeder Zug wird eingestuft, indem die Bewertung vor dem Zug gegen die
-Bewertung danach gehalten wird (aus Sicht des Ziehenden). Der Verlust in
-Zentibauern ergibt die Einstufung:
+Bewertung danach gehalten wird (aus Sicht des Ziehenden). Gemessen wird
+dabei der Verlust an **Gewinnwahrscheinlichkeit**, nicht in Zentibauern:
+ein Abfall von +8 auf +3 ändert am Ausgang nichts, derselbe Bauernwert in
+ausgeglichener Stellung entscheidet dagegen die Partie.
 
-| Verlust | Einstufung | Symbol |
-|---------|------------|--------|
-| < 20 | Bester Zug | – |
-| < 50 | Gut | – |
-| < 100 | Ungenau | `?!` |
-| < 200 | Fehler | `?` |
-| ab 200 | Grober Fehler | `??` |
+| Verlust (Gewinn-%) | Einstufung | Symbol |
+|--------------------|------------|--------|
+| < 2 | Bester Zug | – |
+| < 10 | Gut | – |
+| < 20 | Ungenau | `?!` |
+| < 30 | Fehler | `?` |
+| ab 30 | Grober Fehler | `??` |
 
 Die Einstufung des letzten Zuges steht unter der Bewertung, die Zugliste
 markiert Ungenauigkeiten und schlechter farbig. Bewertet wird nur, solange
