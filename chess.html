@@ -122,6 +122,21 @@
   .lobby .msg{min-height:18px; margin-top:12px; font-size:12px; color:var(--sel);}
   .btn.link{background:none; color:var(--text); opacity:.5; font-weight:400;
     font-size:12px; padding:6px;}
+  .recap{z-index:11;}                 /* Auswertung liegt über der Lobby */
+  .recap .card{width:420px;}
+  .recapchart{background:#1c1f26; border-radius:8px; padding:6px; margin-bottom:14px;}
+  .recapchart svg{display:block; width:100%; height:70px;}
+  .recaptable{width:100%; font-size:13px; margin-bottom:16px;}
+  .recaptable .rrow{display:grid; grid-template-columns:1fr 62px 62px;
+    gap:6px; padding:5px 8px; align-items:center;}
+  .recaptable .rrow.head{font-size:11px; letter-spacing:.05em; text-transform:uppercase;
+    opacity:.5;}
+  .recaptable .rrow.acc{background:#1c1f26; border-radius:8px; margin-bottom:6px;
+    font-weight:700; font-size:15px;}
+  .recaptable .rname{display:flex; align-items:center; gap:7px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; font-weight:600;}
+  .recaptable .num{text-align:center; font-family:Consolas,monospace;}
+  .recaptable .lab{text-align:left; opacity:.75;}
 </style>
 </head>
 <body>
@@ -306,6 +321,7 @@
     <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
     <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Weiß am Zug</span></div>
     <div class="players" id="players"></div>
+    <button class="btn sec" id="recapBtn" style="display:none">Auswertung</button>
     <button class="btn" id="newBtn">Neues Spiel</button>
     <button class="btn sec" id="undoBtn">Zug zurück</button>
     <button class="btn sec" id="flipBtn">Brett drehen</button>
@@ -318,6 +334,15 @@
     </div>
     <div class="specs" id="specs"></div>
     <div class="moves" id="moves"></div>
+  </div>
+</div>
+<div class="lobby recap" id="recap">
+  <div class="card">
+    <h2 id="recapTitle">Partie beendet</h2>
+    <p id="recapSub">Analyse läuft …</p>
+    <div class="recapchart" id="recapChart"></div>
+    <div class="recaptable" id="recapTable"></div>
+    <button class="btn" id="recapClose">Schließen</button>
   </div>
 </div>
 <div class="lobby" id="lobby">
@@ -825,6 +850,7 @@ const Sync={
 };
 // Übernimmt einen empfangenen Zustand vollständig
 function applyState(st){
+  const wasOver=(phase==='over');
   seats.w=st.w; seats.b=st.b; names.w=st.nw; names.b=st.nb;
   specs=st.specs; tc=st.tc; phase=st.st; result=st.res;
   clock.w=st.tw; clock.b=st.tb; clockAt=Date.now();   // Basis fürs lokale Ticken
@@ -832,6 +858,7 @@ function applyState(st){
   if(mySide==='w'&&seats.w!==myId) leaveSeat(true);        // Platz verloren
   else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
   render(); renderLobby(); syncLobby();   // Startet der Gegner, schließt die Lobby
+  if(!wasOver && phase==='over') runRecap();
 }
 window.ChessSync=Sync;             // Zugriffspunkt für externe Transports
 
@@ -859,10 +886,12 @@ function chargeClock(col){                  // Zeit des ziehenden Spielers abrec
 function startGame(){
   const b=tcParts().base;
   clock={w:b,b:b}; clockAt=Date.now(); phase='run'; result='';
+  recapData=null; quality=[]; hideRecap();
   newGameSilent(); render(); renderLobby(); Sync.publish(); syncLobby();
 }
 function endGame(text){
   phase='over'; result=text; render(); renderLobby(); Sync.publish();
+  runRecap();
 }
 function tickClocks(){
   if(!Sync.transport) return;
@@ -933,6 +962,8 @@ function renderPlayers(){
     }
     el.appendChild(row);
   }
+  const rb=document.getElementById('recapBtn');
+  if(rb) rb.style.display=(plc&&phase==='over'&&history.length)?'block':'none';
   const sp=document.getElementById('specs');
   if(!plc){ sp.textContent=''; return; }
   sp.textContent = specs.length
@@ -964,12 +995,15 @@ let quality=[];                      // Einstufung je Halbzug
 function scoreCp(sc){                // Matt in eine Zentibauern-Zahl übersetzen
   return sc.mate!==undefined ? (sc.mate>0?1:-1)*(10000-Math.abs(sc.mate)*10) : sc.cp;
 }
-function classify(loss){
-  if(loss<20)  return {t:'Bester Zug', s:'',   c:'q-best'};
-  if(loss<50)  return {t:'Gut',        s:'',   c:'q-good'};
-  if(loss<100) return {t:'Ungenau',    s:'?!', c:'q-inac'};
-  if(loss<200) return {t:'Fehler',     s:'?',  c:'q-mist'};
-  return             {t:'Grober Fehler',s:'??',c:'q-blun'};
+/* Eingestuft wird nach dem Verlust an Gewinnwahrscheinlichkeit, nicht nach
+   Zentibauern: ein Abfall von +8 auf +3 ändert am Ausgang nichts, während
+   derselbe Bauernwert in ausgeglichener Stellung die Partie entscheidet. */
+function classify(drop){
+  if(drop<2)  return {t:'Bester Zug',  s:'',   c:'q-best'};
+  if(drop<10) return {t:'Gut',         s:'',   c:'q-good'};
+  if(drop<20) return {t:'Ungenau',     s:'?!', c:'q-inac'};
+  if(drop<30) return {t:'Fehler',      s:'?',  c:'q-mist'};
+  return            {t:'Grober Fehler',s:'??', c:'q-blun'};
 }
 
 function engineOn(){
@@ -984,7 +1018,16 @@ function engineOff(){
   sf=null; sfReady=false; sfSeen='';
 }
 function onEngine(line){
-  if(line==='uciok'){ sfReady=true; analyse(true); return; }
+  if(line==='uciok'){ sfReady=true; if(batch) batch.go(); else analyse(true); return; }
+  if(batch){                                   // Stapel-Analyse fürs Recap
+    if(line.indexOf('info ')===0){
+      const m=/score mate (-?\d+)/.exec(line), c=/score cp (-?\d+)/.exec(line);
+      if(m||c) batch.cp=batch.sign*scoreCp(m?{mate:+m[1]}:{cp:+c[1]});
+    } else if(line.indexOf('bestmove')===0){
+      const r=batch.res; const v=batch.cp; batch=null; r(v);
+    }
+    return;
+  }
   if(line.indexOf('info ')!==0 || line.indexOf(' pv ')<0) return;
   const mate=/score mate (-?\d+)/.exec(line), cp=/score cp (-?\d+)/.exec(line);
   const dep=/ depth (\d+)/.exec(line);
@@ -1001,9 +1044,9 @@ function rateLastMove(){
   const i=history.length-1;
   if(i<0||!evalPrev||quality[i]) return;
   const mover=(state.turn==='w')?'b':'w';          // wer gerade gezogen hat
-  const before=evalPrev.cp, after=evalCur.cp;
-  const loss=(mover==='w')?(before-after):(after-before);
-  quality[i]=classify(Math.max(0,loss));
+  const before=winPct(evalPrev.cp), after=winPct(evalCur.cp);
+  const drop=(mover==='w')?(before-after):(after-before);
+  quality[i]=classify(Math.max(0,drop));
   quality[i].san=history[i].san;
   renderMoves(); showLastQuality();
 }
@@ -1081,6 +1124,102 @@ function updateEval(){                             // nur Zuschauer sehen die An
   if(want){ engineOn(); analyse(false); } else if(sf) engineOff();
 }
 
+/* ---------- Game Recap: Partie nach dem Ende komplett auswerten ---------- */
+const RECAP_DEPTH=14;
+let batch=null, recapRun=false, recapData=null;
+
+// Bewertung einer Stellung nach k Halbzügen (aus Sicht von Weiß)
+function evalPosition(movesStr,k){
+  return new Promise(res=>{
+    const send=()=>{ sf.postMessage('position startpos'+(movesStr?' moves '+movesStr:''));
+                     sf.postMessage('go depth '+RECAP_DEPTH); };
+    batch={cp:0, sign:(k%2===0)?1:-1, res, go:send};
+    if(sfReady) send();
+  });
+}
+// Gewinnerwartung und Genauigkeit nach der bei lichess gebräuchlichen Formel
+function winPct(cp){ return 50+50*(2/(1+Math.exp(-0.00368208*cp))-1); }
+function moveAccuracy(drop){
+  return Math.max(0,Math.min(100,103.1668*Math.exp(-0.04354*drop)-3.1669));
+}
+async function runRecap(){
+  if(recapRun||sfOff) return;
+  recapRun=true;
+  const moves=serializeGame().split(/\s+/).filter(Boolean);
+  showRecap({busy:true,done:0,total:moves.length+1});
+  engineOn();
+  if(!sf){ recapRun=false; showRecap({error:true}); return; }
+  const cps=[];
+  for(let k=0;k<=moves.length;k++){
+    cps.push(await evalPosition(moves.slice(0,k).join(' '),k));
+    showRecap({busy:true,done:k+1,total:moves.length+1});
+  }
+  // Verluste je Zug bestimmen und zu Genauigkeit und Kategorien verdichten
+  const st={w:{acc:[],n:0,best:0,good:0,inac:0,mist:0,blun:0},
+            b:{acc:[],n:0,best:0,good:0,inac:0,mist:0,blun:0}};
+  const marks=[];
+  for(let i=0;i<moves.length;i++){
+    const mover=(i%2===0)?'w':'b', s=st[mover];
+    const before=winPct(cps[i]), after=winPct(cps[i+1]);
+    const drop=Math.max(0,(mover==='w')?(before-after):(after-before));
+    s.acc.push(moveAccuracy(drop)); s.n++;
+    const q=classify(drop); marks.push(q);
+    if(drop<2) s.best++; else if(drop<10) s.good++;
+    else if(drop<20) s.inac++; else if(drop<30) s.mist++; else s.blun++;
+  }
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+  recapData={cps,st,marks,accW:avg(st.w.acc),accB:avg(st.b.acc)};
+  quality=marks;                       // Symbole in der Zugliste nachtragen
+  renderMoves();
+  recapRun=false;
+  showRecap({});
+}
+function evalChart(cps){
+  if(!cps||cps.length<2) return '';
+  const W=390,H=70,cl=v=>Math.max(-800,Math.min(800,v));
+  const x=i=>i*(W/(cps.length-1));
+  const y=v=>H/2-(cl(v)/800)*(H/2-3);
+  let d='M0 '+H/2;
+  cps.forEach((v,i)=>{ d+=' L'+x(i).toFixed(1)+' '+y(v).toFixed(1); });
+  const area=d+' L'+W+' '+H+' L0 '+H+' Z';
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
+    '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#26262b"/>'+
+    '<path d="'+area+'" fill="#fbf8f1"/>'+
+    '<line x1="0" y1="'+H/2+'" x2="'+W+'" y2="'+H/2+'" stroke="#6b7280" stroke-width="1"/>'+
+    '</svg>';
+}
+function showRecap(o){
+  const box=document.getElementById('recap');
+  if(!box) return;
+  box.classList.add('on');
+  document.getElementById('recapTitle').textContent=result||'Partie beendet';
+  const sub=document.getElementById('recapSub');
+  const chart=document.getElementById('recapChart');
+  const tab=document.getElementById('recapTable');
+  if(o.error){ sub.textContent='Analyse nicht verfügbar.'; chart.innerHTML=''; tab.innerHTML=''; return; }
+  if(o.busy){ sub.textContent='Analysiere Partie … '+o.done+'/'+o.total;
+              chart.innerHTML=''; tab.innerHTML=''; return; }
+  if(!recapData){ sub.textContent=''; return; }
+  const d=recapData;
+  sub.textContent=history.length+' Halbzüge · Genauigkeit und Zugqualität';
+  chart.innerHTML=evalChart(d.cps);
+  const nm=c=>names[c]||(c==='w'?'Weiß':'Schwarz');
+  const row=(lab,kw,kb,cls)=>'<div class="rrow"><span class="lab '+(cls||'')+'">'+lab+
+    '</span><span class="num">'+kw+'</span><span class="num">'+kb+'</span></div>';
+  tab.innerHTML=
+    '<div class="rrow head"><span></span><span class="num">'+nm('w')+
+      '</span><span class="num">'+nm('b')+'</span></div>'+
+    '<div class="rrow acc"><span class="lab">Genauigkeit</span>'+
+      '<span class="num">'+d.accW.toFixed(1)+'</span>'+
+      '<span class="num">'+d.accB.toFixed(1)+'</span></div>'+
+    row('Bester Zug',d.st.w.best,d.st.b.best,'q-best')+
+    row('Gut',d.st.w.good,d.st.b.good,'q-good')+
+    row('Ungenau',d.st.w.inac,d.st.b.inac,'q-inac')+
+    row('Fehler',d.st.w.mist,d.st.b.mist,'q-mist')+
+    row('Grober Fehler',d.st.w.blun,d.st.b.blun,'q-blun');
+}
+function hideRecap(){ const b=document.getElementById('recap'); if(b) b.classList.remove('on'); }
+
 /* ---------- Lobby: Platz wählen oder zuschauen ---------- */
 // Kennung dieses Browsers; übersteht Reload, damit der Platz erhalten bleibt.
 let myId=null;
@@ -1101,7 +1240,9 @@ function hideLobby(){ if(lobbyEl) lobbyEl.classList.remove('on'); }
 // Gegner und stellen bis zum Start noch die Bedenkzeit ein.
 function syncLobby(){
   if(!Sync.transport) return;
-  const open=(mySide===null)||((mySide==='w'||mySide==='b')&&phase!=='run');
+  // Nach dem Spielende hat die Auswertung Vorrang; die Lobby kommt erst,
+  // wenn eine neue Partie vorbereitet wird.
+  const open=(mySide===null)||((mySide==='w'||mySide==='b')&&phase==='setup');
   if(open) showLobby(); else hideLobby();
 }
 
@@ -1257,6 +1398,10 @@ try{ const n=sessionStorage.getItem('chessName');
      if(n) document.getElementById('nameInput').value=n; }catch(e){}
 for(const btn of document.querySelectorAll('.tc'))
   btn.addEventListener('click',()=>setTC(btn.dataset.tc));
+document.getElementById('recapClose').addEventListener('click',hideRecap);
+document.getElementById('recapBtn').addEventListener('click',()=>{
+  if(recapData) showRecap({}); else runRecap();
+});
 document.getElementById('lobbyStart').addEventListener('click',startGame);
 document.getElementById('lobbyLeave').addEventListener('click',()=>leaveSeat(false));
 
