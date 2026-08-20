@@ -42,7 +42,7 @@ Die Betriebsart wird über die URL gewählt:
 | URL | Verhalten |
 |-----|-----------|
 | `chess.html?plc` | **Der Link für alle.** Beim Öffnen erscheint die Lobby: Weiß, Schwarz oder zuschauen. |
-| `chess.html` | Standalone ohne Steuerung. Zwei Personen spielen abwechselnd an einem Bildschirm. |
+| `chess.html` | Hotseat ohne Steuerung: zwei Personen spielen abwechselnd an einem Bildschirm, mit Auswertung nach Spielende. |
 | `chess.html?plc&side=w` | Überspringt die Lobby und belegt direkt Weiß (`b` = Schwarz, `v` = Zuschauer). |
 | `chess.html?plc&pv=meineVar` | Abweichender PV-Name (Default: `gChessState`). |
 | `chess.html?demo` | Synchronisation zwischen zwei Tabs desselben Browsers (nur zum Testen). |
@@ -102,6 +102,12 @@ Sobald eine Partie endet, analysiert **jeder** Client die komplette Partie
 neu und zeigt eine Auswertung. Auch Spieler bekommen sie – die Engine
 startet erst nach Spielende, hilft also während der Partie niemandem. Über
 *Auswertung* im Seitenpanel lässt sie sich erneut öffnen.
+
+Das gilt genauso für den **Hotseat-Betrieb** ohne Steuerung: endet die
+Partie durch Matt oder Patt, öffnet sich dieselbe Auswertung inklusive
+Durchgehen. Die Spieler heißen dort schlicht Weiß und Schwarz. Eine
+laufende Bewertung gibt es im Hotseat bewusst nicht – beide sitzen vor
+demselben Bildschirm.
 
 Enthalten sind:
 
