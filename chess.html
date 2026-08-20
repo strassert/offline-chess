@@ -94,8 +94,19 @@
   .q-best{color:#7fd88f;} .q-good{color:#9fd3a6;} .q-inac{color:#f0c14b;}
   .q-mist{color:#f09145;} .q-blun{color:#ff6b6b;}
   .moves .q{font-weight:700;}
-  .lobby input{width:100%; padding:10px 12px; margin-bottom:12px; font-size:14px;
+  .lobby input{width:100%; padding:10px 12px; margin-bottom:2px; font-size:14px;
     border-radius:8px; border:1px solid #4a505c; background:#1c1f26; color:var(--text);}
+  .lobby .lbl{display:block; text-align:left; font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; opacity:.5; margin:12px 0 5px;}
+  .seatrow{display:flex; gap:8px;}
+  .seat{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:10px 6px; border-radius:8px; border:1px solid #4a505c; cursor:pointer;
+    background:#1c1f26; color:var(--text); font-size:13px; font-weight:600;}
+  .seat .chip{width:20px; height:20px; border-radius:50%; border:1px solid #6b7280;}
+  .seat .chip.cw{background:#fbf8f1;} .seat .chip.cb{background:#26262b;}
+  .seat .who{font-size:11px; font-weight:400; opacity:.6; min-height:14px;}
+  .seat.on{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent);}
+  .seat:disabled{opacity:.45; cursor:not-allowed;}
   .tcrow{display:flex; gap:8px; margin-bottom:14px;}
   .tc{flex:1; padding:10px; border-radius:8px; border:1px solid #4a505c; cursor:pointer;
     background:#1c1f26; color:var(--text); font-size:13px; font-weight:600;}
@@ -295,11 +306,6 @@
     <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
     <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Weiß am Zug</span></div>
     <div class="players" id="players"></div>
-    <div class="tcrow" id="tcRow2" style="display:none">
-      <button class="tc" data-tc="180+2">3 + 2</button>
-      <button class="tc" data-tc="600+0">10 Min</button>
-    </div>
-    <button class="btn" id="startBtn" style="display:none">Spiel starten</button>
     <button class="btn" id="newBtn">Neues Spiel</button>
     <button class="btn sec" id="undoBtn">Zug zurück</button>
     <button class="btn sec" id="flipBtn">Brett drehen</button>
@@ -317,15 +323,30 @@
 <div class="lobby" id="lobby">
   <div class="card">
     <h2>♟ Schach</h2>
-    <p>Name eingeben und Platz wählen</p>
+    <p id="lobbyStep">Name, Farbe und Bedenkzeit wählen</p>
+
+    <label class="lbl" for="nameInput">Name</label>
     <input id="nameInput" maxlength="12" placeholder="Dein Name" autocomplete="off">
+
+    <label class="lbl">Farbe</label>
+    <div class="seatrow">
+      <button class="seat" id="seatW" data-col="w">
+        <span class="chip cw"></span><span class="st">Weiß</span><span class="who"></span>
+      </button>
+      <button class="seat" id="seatB" data-col="b">
+        <span class="chip cb"></span><span class="st">Schwarz</span><span class="who"></span>
+      </button>
+    </div>
+
+    <label class="lbl">Bedenkzeit</label>
     <div class="tcrow" id="tcRow">
       <button class="tc on" data-tc="180+2">3 + 2</button>
       <button class="tc" data-tc="600+0">10 Min</button>
     </div>
-    <button class="btn" id="seatW">Weiß spielen</button>
-    <button class="btn" id="seatB">Schwarz spielen</button>
+
+    <button class="btn" id="lobbyStart" style="display:none">Spiel starten</button>
     <button class="btn sec" id="seatV">Nur zuschauen</button>
+    <button class="btn sec" id="lobbyLeave" style="display:none">Platz freigeben</button>
     <div class="msg" id="lobbyMsg"></div>
     <button class="btn link" id="resetSeats">Plätze zurücksetzen</button>
   </div>
@@ -377,6 +398,7 @@ function newGame(){
   render();
   Sync.publish();
   if(typeof renderPlayers==='function') renderPlayers();
+  if(typeof syncLobby==='function') syncLobby();   // zurück in die Vorbereitung
 }
 
 const inside=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
@@ -809,7 +831,7 @@ function applyState(st){
   if(st.moves!==serializeGame()) loadGame(st.moves);
   if(mySide==='w'&&seats.w!==myId) leaveSeat(true);        // Platz verloren
   else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
-  render(); renderLobby();
+  render(); renderLobby(); syncLobby();   // Startet der Gegner, schließt die Lobby
 }
 window.ChessSync=Sync;             // Zugriffspunkt für externe Transports
 
@@ -837,7 +859,7 @@ function chargeClock(col){                  // Zeit des ziehenden Spielers abrec
 function startGame(){
   const b=tcParts().base;
   clock={w:b,b:b}; clockAt=Date.now(); phase='run'; result='';
-  newGameSilent(); render(); renderLobby(); Sync.publish();
+  newGameSilent(); render(); renderLobby(); Sync.publish(); syncLobby();
 }
 function endGame(text){
   phase='over'; result=text; render(); renderLobby(); Sync.publish();
@@ -916,12 +938,6 @@ function renderPlayers(){
   sp.textContent = specs.length
     ? 'Zuschauer: '+specs.map(s=>s.name||'Gast').join(', ')
     : 'Keine Zuschauer';
-  const sb=document.getElementById('startBtn');
-  const canStart=(mySide==='w'||mySide==='b')&&seats.w&&seats.b&&phase!=='run';
-  sb.style.display=canStart?'block':'none';
-  sb.textContent=phase==='over'?'Neue Partie starten':'Spiel starten';
-  const row2=document.getElementById('tcRow2');
-  if(row2) row2.style.display=canStart?'flex':'none';
   renderTC();
 }
 function renderTC(){
@@ -931,7 +947,7 @@ function renderTC(){
 function setTC(v){
   if(phase==='run') return;
   tc=v; const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
-  renderTC(); renderPlayers();
+  renderTC(); renderPlayers(); renderLobby();
   if(mySide==='w'||mySide==='b') Sync.publish();
 }
 
@@ -1081,26 +1097,51 @@ let lobbyMsg='';
 function seatFree(col){ return !seats[col] || seats[col]===myId; }
 function showLobby(){ if(lobbyEl) lobbyEl.classList.add('on'); renderLobby(); }
 function hideLobby(){ if(lobbyEl) lobbyEl.classList.remove('on'); }
+// Die Lobby bleibt offen, bis die Partie läuft: Spieler warten dort auf den
+// Gegner und stellen bis zum Start noch die Bedenkzeit ein.
+function syncLobby(){
+  if(!Sync.transport) return;
+  const open=(mySide===null)||((mySide==='w'||mySide==='b')&&phase!=='run');
+  if(open) showLobby(); else hideLobby();
+}
 
 function renderLobby(){
   if(!lobbyEl) return;
+  const ready=Sync.ready;
   for(const col of ['w','b']){
     const btn=document.getElementById('seat'+col.toUpperCase());
     if(!btn) continue;
-    const taken=seats[col]&&seats[col]!==myId;
-    btn.disabled=!!taken||!Sync.ready;
-    btn.textContent=(col==='w'?'Weiß spielen':'Schwarz spielen')+(taken?' — besetzt':'');
+    const mine=seats[col]===myId, taken=seats[col]&&!mine;
+    btn.disabled=!!taken||!ready;
+    btn.classList.toggle('on',mine);
+    btn.querySelector('.who').textContent =
+      mine?'du':(taken?(names[col]||'besetzt'):'frei');
   }
-  const rs=document.getElementById('resetSeats'); if(rs) rs.disabled=!Sync.ready;
+  for(const b of document.querySelectorAll('#tcRow .tc')) b.disabled=!ready;
+  const rs=document.getElementById('resetSeats'); if(rs) rs.disabled=!ready;
+
+  const seated=(mySide==='w'||mySide==='b');
+  const both=!!(seats.w&&seats.b);
+  const start=document.getElementById('lobbyStart');
+  if(start){
+    start.style.display=seated?'block':'none';
+    start.disabled=!both||!ready;
+    start.textContent=both?'Spiel starten':'Warte auf Gegner …';
+  }
+  const lv=document.getElementById('lobbyLeave');
+  if(lv) lv.style.display=seated?'block':'none';
+  const sv=document.getElementById('seatV');
+  if(sv) sv.style.display=seated?'none':'block';
+  const step=document.getElementById('lobbyStep');
+  if(step) step.textContent = seated
+    ? (both?'Bereit – Bedenkzeit prüfen und starten':'Warte auf den zweiten Spieler')
+    : 'Name, Farbe und Bedenkzeit wählen';
+
   const m=document.getElementById('lobbyMsg');
-  if(m) m.textContent=Sync.ready?lobbyMsg:'Verbinde mit der Steuerung …';
-  if(seatInfoEl){
-    const nm=(c)=>!seats[c]?'frei':(seats[c]===myId?'du':'besetzt');
-    seatInfoEl.textContent='Weiß: '+nm('w')+' · Schwarz: '+nm('b');
-  }
-  if(leaveBtn){                       // Zuschauer kommen so zur Platzwahl zurück
-    leaveBtn.style.display=mySide?'block':'none';
-    leaveBtn.textContent=(mySide==='v')?'Platz wählen':'Platz freigeben';
+  if(m) m.textContent=ready?lobbyMsg:'Verbinde mit der Steuerung …';
+  if(leaveBtn){                       // im Panel: zurück zur Platzwahl
+    leaveBtn.style.display=(mySide==='v')?'block':'none';
+    leaveBtn.textContent='Platz wählen';
   }
 }
 
@@ -1140,7 +1181,7 @@ function takeSeat(col){
     const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
   }
   Sync.publish();
-  hideLobby(); applySide();
+  applySide(); syncLobby();
   // Gleichzeitige Anmeldung: nach einem Abgleich prüfen, ob der Platz hält
   setTimeout(()=>{
     if(mySide===col && seats[col]!==myId){
@@ -1153,13 +1194,13 @@ function watchOnly(){
   if(!n){ lobbyMsg='Bitte zuerst einen Namen eingeben.'; renderLobby(); return; }
   dropMe();
   if(specs.length<MAXSPECS) specs.push({id:myId,name:n});
-  mySide='v'; lobbyMsg=''; Sync.publish(); hideLobby(); applySide();
+  mySide='v'; lobbyMsg=''; Sync.publish(); applySide(); syncLobby();
 }
 function leaveSeat(lost){
   if(mySide==='w'||mySide==='b'){
     if(seats[mySide]===myId){ seats[mySide]=''; names[mySide]=''; if(!lost) Sync.publish(); }
   } else if(mySide==='v'){ dropMe(); Sync.publish(); }
-  mySide=null; applySide(); showLobby();
+  mySide=null; applySide(); syncLobby();
 }
 function resetSeats(){
   seats.w=''; seats.b=''; names.w=''; names.b=''; specs=[];
@@ -1216,7 +1257,8 @@ try{ const n=sessionStorage.getItem('chessName');
      if(n) document.getElementById('nameInput').value=n; }catch(e){}
 for(const btn of document.querySelectorAll('.tc'))
   btn.addEventListener('click',()=>setTC(btn.dataset.tc));
-document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('lobbyStart').addEventListener('click',startGame);
+document.getElementById('lobbyLeave').addEventListener('click',()=>leaveSeat(false));
 
 document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
 document.getElementById('seatB').addEventListener('click',()=>takeSeat('b'));
