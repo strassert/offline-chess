@@ -3268,6 +3268,7 @@ function initBoard(){
 }
 
 let state, history, selected, legalCache, flipped=false;
+let localOver=false;          // Hotseat: Partie beendet (ohne Steuerung)
 // Eigene Farbe im PLC-Betrieb: 'w', 'b', 'v' (Zuschauer) oder null (beide Farben)
 let mySide=null;
 
@@ -3279,6 +3280,8 @@ function newGame(){
     halfmove:0, fullmove:1
   };
   history=[]; selected=null; legalCache=null;
+  localOver=false; recapData=null; quality=[]; reviewIdx=null;
+  hideRecap(); renderReview();
   if(Sync.transport){                    // im PLC-Betrieb zurück in die Aufstellung
     phase='setup'; result='';
     const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
@@ -3585,12 +3588,13 @@ function finishMove(mv,promo){
   if(!Sync.suppress){
     const mover=(state.turn==='w')?'b':'w';        // wer gerade gezogen hat
     chargeClock(mover);
-    if(Sync.transport&&noMoves){                   // Matt oder Patt beendet die Partie
-      phase='over';
-      result = chk ? 'Schachmatt - '+(names[mover]||(mover==='w'?'Weiß':'Schwarz'))+' gewinnt'
-                   : 'Patt - Remis';
+    if(noMoves){                                   // Matt oder Patt beendet die Partie
+      const who=names[mover]||(mover==='w'?'Weiß':'Schwarz');
+      result = chk ? 'Schachmatt - '+who+' gewinnt' : 'Patt - Remis';
+      if(Sync.transport) phase='over'; else localOver=true;
     }
     render(); Sync.publish();
+    if(localOver&&!Sync.transport) runRecap();     // Hotseat: Auswertung anbieten
   }
 }
 
@@ -3832,7 +3836,8 @@ function renderPlayers(){
     el.appendChild(row);
   }
   const rb=document.getElementById('recapBtn');
-  if(rb) rb.style.display=(plc&&phase==='over'&&history.length)?'block':'none';
+  const over=plc?(phase==='over'):localOver;
+  if(rb) rb.style.display=(over&&history.length)?'block':'none';
   const sp=document.getElementById('specs');
   if(!plc){ sp.textContent=''; return; }
   sp.textContent = specs.length
