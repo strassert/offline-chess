@@ -137,6 +137,20 @@
     text-overflow:ellipsis; white-space:nowrap; font-weight:600;}
   .recaptable .num{text-align:center; font-family:Consolas,monospace;}
   .recaptable .lab{text-align:left; opacity:.75;}
+  .recaptable .rrow.est{font-size:12px; opacity:.7;}
+  .recaptable .rrow.key{font-size:12px; grid-template-columns:1fr 60px;}
+  .q-book{color:#c9a86a;} .q-brill{color:#26c2a3;} .q-great{color:#5b9ad5;}
+  .q-miss{color:#e07a5f;}
+  .review .rvbar{height:10px; border-radius:5px; background:#141414; overflow:hidden;
+    box-shadow:inset 0 0 0 1px #4a505c;}
+  .review .rvbar .fill{height:100%; background:#fbf8f1; transition:width .2s;}
+  .review .rvhead{display:flex; justify-content:space-between; margin-top:6px;
+    font-family:Consolas,monospace; font-size:15px; font-weight:700;}
+  .review .rvhead #rvCount{font-size:12px; font-weight:400; opacity:.5;}
+  .review .rvmove{margin-top:8px; font-size:13px; font-weight:700; min-height:18px;}
+  .review .rvbest{font-size:12px; opacity:.7; min-height:16px; font-family:Consolas,monospace;}
+  .review .rvnav{display:flex; gap:6px; margin-top:10px;}
+  .review .rvnav .btn{margin-top:0; padding:9px 0; font-size:13px;}
 </style>
 </head>
 <body>
@@ -321,6 +335,19 @@
     <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
     <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Weiß am Zug</span></div>
     <div class="players" id="players"></div>
+    <div class="review" id="review" style="display:none">
+      <div class="rvbar"><div class="fill" id="rvFill"></div></div>
+      <div class="rvhead"><span id="rvScore">+0.00</span><span id="rvCount">0 / 0</span></div>
+      <div class="rvmove" id="rvMove"></div>
+      <div class="rvbest" id="rvBest"></div>
+      <div class="rvnav">
+        <button class="btn sec" id="rvFirst">⏮</button>
+        <button class="btn sec" id="rvPrev">◀</button>
+        <button class="btn sec" id="rvNext">▶</button>
+        <button class="btn sec" id="rvLast">⏭</button>
+      </div>
+      <button class="btn sec" id="rvExit">Durchgehen beenden</button>
+    </div>
     <button class="btn sec" id="recapBtn" style="display:none">Auswertung</button>
     <button class="btn" id="newBtn">Neues Spiel</button>
     <button class="btn sec" id="undoBtn">Zug zurück</button>
@@ -342,7 +369,8 @@
     <p id="recapSub">Analyse läuft …</p>
     <div class="recapchart" id="recapChart"></div>
     <div class="recaptable" id="recapTable"></div>
-    <button class="btn" id="recapClose">Schließen</button>
+    <button class="btn" id="recapReview">Partie durchgehen</button>
+    <button class="btn sec" id="recapClose">Schließen</button>
   </div>
 </div>
 <div class="lobby" id="lobby">
@@ -376,6 +404,2841 @@
     <button class="btn link" id="resetSeats">Plätze zurücksetzen</button>
   </div>
 </div>
+<!-- Eröffnungsnamen: lichess-org/chess-openings (CC0), Zugfolgen als
+     Quadrat-Indizes kodiert und präfixkomprimiert. -->
+<script id="bookData" type="text/plain">A+t	AZukertort Opening
+CBQ0kGX	R: Drunken Cavalry Variation
+GKa	KDefense: Sicilian Knight Variation
+DS	KOpening: Black Mustang Defense
+CGV	R
+E0k	R: Lemberger Gambit
+Fs	TQuiet System
+E2uJZ	AKing's Indian Attack: Spassky Variation
+GLb	U
+I92KS8+Cd	U, with Bf5
+QzrMU5z	e
+Utn	e
+SPX	e
+UyiMU	ARéti Opening: Anglo-Slav Variation, with g3
+Wbi	AKing's Indian Attack, with Bf5
+Pm	U: Yugoslav Variation
+KMU	U, with e6
+M8+FM	d
+GOW	U: Symmetrical Defense
+I92FO8+EGzrLb	WWahls Defense
+Ixh	WSmyslov Variation
+JpFO6xEG92LT8+	AZukertort Opening: Double Fianchetto Attack
+E5qBS	R
+EwgOWxh	R: Myers Polish Attack
+ExhOW6x	APolish Opening: Zukertort System
+Fp	AZukertort Opening: Nimzo-Larsen Variation
+EyiKSxpLb6xCd	ARéti Opening: Anglo-Slav Variation, New York System
+Q0s	z
+Qzr	z
+DXzjOW	AZukertort Defense: Kingside Variation
+CIQ	KOpening: St. George Defense
+DY	TWare Defense
+CJR	TQueenside Fianchetto Variation
+DZ	TPolish Defense
+CKS	TSlav Invitation
+Da	Uicilian Invitation
+E0sOWzjFOjaDY	AColle System: Rhamphorhynchus Variation
+EyiOWzjFO0kDR	AModern Defense: Semi-Averbakh Variation, Polish Variation
+PY	qterodactyl Variation
+Q5qLT	APterodactyl Defense
+Ezjaj0s	AZukertort Opening: Speelsmet Gambit
+CLT	TPirc Invitation
+E0kCm	TWade Defense
+EzjMc	TVos Gambit
+Db	R
+E/+	R: Ampel Variation
+E0sKayibixp	TPachman Gambit
+E2u	AKing's Indian Attack
+GCm	U: Keres Variation
+I92BL	l
+GGV92MU8+FMyiEGxpKa	AEnglish Opening: Agincourt Defense, Neo-Catalan Declined
+GKS92Cm8+BL	AKing's Indian Attack: Keres Variation
+KGV8+CmzjMU	AQueen's Pawn Game: Symmetrical Variation, Pseudo-Catalan
+Ha	AKing's Indian Attack: Sicilian Variation
+I92	o
+KBS	WFrench Variation
+Mzj	AZukertort Opening: Reversed Grünfeld
+OGV	k
+Q8+	k
+OMU8+	k
+KGV8+MUzr	AKing's Indian Attack: Sicilian Variation
+GMc	WOmega-Delta Gambit
+GOW	WDouble Fianchetto
+I92FO8+MczrGM	WPachman System
+E5q	AZukertort Opening: Reversed Mexican Defense
+Ewg	TThe Potato
+Exp	ANimzo-Larsen Attack: Classical Variation
+GGV6xKa0k	VNorfolk Gambit
+KOWyiKS	ARéti Opening: Anglo-Slav Variation, Bled Variation
+GKa0k	ANimzo-Larsen Attack: Norfolk Gambit
+Iyibi5q	AZukertort Opening: Regina-Nu Gambit
+Eyi	ARéti Opening
+GJZ	M: Zilbermints Gambit
+GKS2uGV92MUxpFM6x	OAnglo-Slav Variation
+Ixp	i, Bogoljubow Variation
+KCd	4
+M6x	4
+Lm	4
+Gbi	ORéti Accepted
+I0sCU	TGambit, Keres Variation
+Hj	OAdvance Variation
+I/+	OPenguin Variation
+I0sKaxh	OReversed Blumenfeld Gambit
+IxhKa	OAdvance Variation, Michel Gambit
+KOe	hNavara Gambit
+EzjCm	AQueen's Pawn Game: Anti-Torre
+Fr	AZukertort Opening: Old Indian Attack
+CMU	TQueen's Gambit Invitation
+EyiIQ5qKa2uJZ	TShabalov Gambit
+Dc	TRoss Gambit
+EtcBScSLS	TThe Walrus
+CNV	TArctic Defense
+E0kGXzjXN	h, Drunken Knight Variation
+Dd	TDutch Variation
+E0k	TLisitsyn Gambit
+EzrGV0k	i Deferred
+COW	TKingside Fianchetto
+EzjFO0kLTyiKajaDY	AModern Defense: Semi-Averbakh Variation, Pterodactyl Variation Accepted
+De	AZukertort Opening: Herrstrom Gambit
+CPX	TBasman Defense
+Bv	AAmar Opening
+CLb2uMc1l	M: Paris Gambit
+KCv9vcl8+lu3u	a, Gent Gambit
+A0k	AKing's Pawn Game
+CBQ	ALemming Defense
+DS	ANimzowitsch Defense
+E+t	T: Declined Variation
+GGVkcVm	VEl Columpio Defense
+MzjLT3vmX9Z	o, Pin Variation
+UcT	qExchange Variation
+VU	rl Columpio Gambit
+GLT	VWilliams Variation
+GMU	VFranco-Nimzowitsch Variation
+GNd	VColorado Countergambit
+Ikd	r Accepted
+E5qGVzjMc	VBreyer Variation
+GMU	VFrench Connection
+GOW	VPirc Connection
+E9Z	Wseudo-Spanish Variation
+Exh	VWheeler Gambit
+Ezj	T
+GIQ	T: Woodchuck Variation
+GLT	VMikenas Variation
+Hb	VScandinavian Variation
+I5q	r, Bogoljubow Variation
+KGV	8ation, Vehre Variation
+KIQ	8ation, Brandics Gambit
+KMc	8ation, Heinola-Deppe Gambit
+KOW	8ation, Erben Gambit
+Kbk	8ation
+Mjb	AVan Geet Opening: Berlin Gambit
+OSB1t	ANimzowitsch Defense: Scandinavian Variation, Bogoljubow Variation, Richter Gambit
+Pc	8ation, Nimzowitsch Gambit
+I6s	VHornung Gambit
+IkbDb	VScandinavian Variation, Exchange Variation
+M5q	8ion, Marshall Gambit
+KSh	tAachen Gambit
+Jc	udvance Variation
+GMc	VKennedy Variation
+Ijb	m, Linksspringer Variation
+JcDn	oHerford Gambit
+KFa	oBielefelder Gambit
+KLT	ode Smet Gambit
+KNV	oHammer Gambit
+KSc+t	oPaulsen Attack
+M1lcS	oRiemann Defense
+PW	oMain Line
+M5q	oKeres Attack
+GNV	VNeo-Mongoloid Defense
+CGV	AAlekhine Defense
+E5qLb	Q: Scandinavian Variation
+IkbKS	o, Geschev Gambit
+JcVLcU	Tpielmann Gambit
+Izrbk6e	Tcandinavian Variation, Myers Gambit
+E9i	SKrejcik Variation
+GVkiN	j, Krejcik Gambit
+EkcVG	SBrooklyn Variation
+IzjNd	k, Everglades Variation
+Hb	SNormal Variation
+I5o	SBuckley Attack
+Jq	SSämisch Attack
+I9ibRipKazr	SKmoch Variation
+Ixp	SWelling Variation
+Iyi	STwo Pawns Attack
+KbRia	i, Lasker Variation
+ORb9iMU5q	SHunt Variation, Lasker Simul Gambit
+WLT	STwo Pawns Attack, Mikenas Variation
+Mwg	kTate Variation
+Mxp	SSteiner Variation
+Ll	SThe Squirrel
+Izj	Q
+KJZ	Q: O'Sullivan Gambit
+KLT	Q
+M+t	Q: Modern Variation
+OBS	i, Larsen-Haakert Variation
+OCm	kMain Line
+Q3v	kPanov Variation
+Q90KS	kFlohr Variation
+Qyi	kAlekhine Variation
+SbRjb	kVitolins Attack
+OOW	kAlburt Variation
+OTc	kLarsen Variation
+ObR	kSchmid Variation
+M9i	SBalogh Variation
+Myi	Q
+ObR+tCm90	Q: Modern Variation, Alekhine Gambit
+Q1l	SFour Pawns Attack
+SCd	j, Trifunovic Variation
+SOW	lFianchetto Variation
+Te	lCambridge Gambit
+QcT	SExchange Variation
+Qia	SHunt Variation
+Hk	SMokele Mbembe
+IzjMU	f, Vavra Defense
+KNV	hModern Line
+Ezr	Taróczy Variation
+DX	AHippopotamus Defense
+EzjOWyiNV	U
+CIQ	ASt. George Defense
+EzjJZ+tCJ9rLT8+OWyqFO	S: San Jorge Variation
+OMU	UPolish Variation
+GMc	UZilbermints Gambit
+DY	AWare Defense
+EzjBS	M: Snagglepuss Defense
+CJR	AOwen Defense
+EzjCJ+t	M: Smith Gambit
+I1tMc	OWind Gambit
+I6e	ONaselwaus Gambit
+I9rNdkdJ27fOW	OMatovinsky Gambit
+HQ	OGuatemala Defense
+GKajaBS	OHekili-Loa Gambit
+CKS	ACaro-Kann Defense
+E+tLbkbSbtc	R: Apocalypse Attack
+Izr	TEndgame Offer
+KbkrkD787	bVariation
+Mte	TDinic Gambit
+E2m	TSpike Variation
+GLb5qbkzr	i, Scorpion-Grob Gambit
+E5q	R
+GLb	R
+I+t	R: Two Knights Attack
+KCm	l, Mindeno Variation
+M3vmf	4, Retreat Line
+Pt	6Exchange Line
+Kbkte	THector Gambit
+I3v	TSt. Patrick's Attack
+I7t	TGoldman Variation
+Izrbk6e	TScorpion-Horus Gambit
+E9i	THillbilly Attack
+GLbipbk7f	j, Schaeffer Gambit
+Exh	TLabahn Attack
+GLbhZ	g, Double Gambit
+GMc6x	iPolish Variation
+Fp	TEuwe Attack
+Eyi	TAccelerated Panov Attack
+GLb	r
+IibSb7p	r, Van Weersel Attack
+IkbDb	tPseudo-Scandinavian
+KSbibGV	tModern Variation
+Jc	TToikkanen Gambit
+GMc	TAccelerated Panov Attack, Open Variation
+Ezj	R
+GBQ	R: De Bruycker Defense
+I5qQK	m
+GGV	TMasi Variation
+GLb	R
+I+tbkte	R: Ulysses Gambit
+I1t	TMaróczy Variation
+KbktkMc+tcj9i	k, Maróczy Gambit
+I5q	R
+KGV	R: Campomanes Attack
+KJZ	TGurgenidze Counterattack
+KOW	eSystem
+Kbk	R
+M1t	R: Rasa-Studier Gambit
+M9i	Tvon Hennig Gambit
+MqkBL+tGVku	TKarpov Variation, Modern Variation, Kasparov Attack
+OGV9r	TAlekhine Gambit
+QkVMV	TTartakower Variation
+U9i	TForgacs Variation
+SOV	TBronstein-Larsen Variation
+RePXeN	TAlien Gambit
+Jz	TModern Variation
+KDR	TEdinburgh Variation
+Kbkzk	TMain Line
+OBL	TKarpov Variation
+Q9iGVkVLV	j, Tiviakov-Fischer Attack
+Qke	lModern Variation
+SLV	1, Ivanchuk Defense
+OCd	TClassical Variation
+QkudW+v	m, Flohr Variation
+U1l	oMaróczy Attack
+U3n	qin Line
+OPX	TFinnish Variation
+I6s	TMieses Gambit
+I9rGVkcVLcU	aAttack, Landau Gambit
+Ikb	TExchange Variation
+KSb	l
+M+tBS	l
+M2m	l, Bulla Attack
+M6l	l
+M9rBSyqGV6l	l, Rubinstein Variation
+Myi	TPanov Attack
+OGV5q	f
+SBS	f, Modern Defense
+U+tCm	v, Mieses Line
+U6eDR	xReifir-Spielmann Line
+XY	xCzerniak Line
+WMU	yarlsbad Line
+SMU	f
+U+tFh	f, Main Line
+SOW	hFianchetto Defense
+UibFO	z, Fianchetto Gambit
+Qia	hGunderam Attack
+Jc	TAdvance Variation
+KCd+0	k, Bronstein Variation
+Nt	mShort Variation
+M2m	mBayonet Attack
+M3n	mTal Variation
+M5q	mVan der Wiel Attack
+ODR	5, Dreyev Defense
+Mxh	mPrins Attack
+MyqMU90	a, Short Variation
+KSa	a Variation, Botvinnik-Carls Defense
+GNd	TMassachusetts Defense
+Fr	TBreyer Variation
+Da	ASicilian Defense
+E+0	Q: Keres Variation
+Ft	Q
+GBS	Q: Old Sicilian
+I5qMc	SClosed, Anti-Sveshnikov Variation
+M9iFMzrGV	z, with Nf6
+SLT	6d6
+UtzMe	1Kharlov-Kramnik Line
+I9Z	SNyezhmetdinov-Rossolimo Attack
+KOW	w, Fianchetto Variation
+M8+FO98Mcxh	yGurgenidze Variation
+QyqGV7g	yFianchetto Variation, Totsky Attack
+Uzj	8 Variation, Lutikov Gambit
+SMczj	8 Variation, Gufeld Gambit
+KSB	yBrooklyn Retreat Defense
+LYxh	ySan Francisco Gambit
+Ixh	SPortsmouth Gambit
+Izj	SOpen
+KMU	SFranco-Sicilian Variation
+Kaj	SOpen
+Mtj	W
+ODK	SFlohr Variation
+PR	SGodiva Variation
+OGV	SOpen
+Q5qLT6eOW	SRichter-Rauzer Variation, Dragon Variation
+U9iDR	SClassical Variation, Anti-Sozin Variation
+WMU	SSozin Attack, Leonhardt Variation
+Uj0	Tpielmann Variation
+SMc	SLasker-Pelikan Variation
+UjS	q, Exchange Variation
+Vp	sSchlechter Variation
+Vt	sRetreat Variation
+OIQyiMc	SO'Kelly Variation, Maróczy Bind, Geller Line
+OLb	SNimzo-American Variation
+OMc	SLöwenthal Variation
+QjZLT	SKalashnikov Variation
+OOW	SAccelerated Dragon
+Q5q	k, Modern Variation
+QjS	mExchange Variation
+Qyi	mMaróczy Bind
+SFO	y
+U6s	y
+GDK	SQuinteros Variation
+HY	SMongoose Variation
+GGV	SNimzowitsch Variation
+I5q	n, Closed Variation
+Ikc	pAdvance Variation
+KVb5qMUqbUbzjBS	pMain Line
+Obq	pExchange Variation
+GIQ	SO'Kelly Variation
+I2u	j, Réti System
+I5q	lYerevan System
+I90	lAronin System
+Ixh	lWing Gambit
+Jp	lKieseritzky System
+Iyi	lMaróczy Bind
+KLT	x, Robatsch Line
+KMU	zPaulsen Line
+Jq	lVenice System
+KGV	y, Barcza Line
+KJZ	0Ljubojevic Line
+KLT	0Steiner Line
+LbkbGV	0Gambit Line
+Izj	lNormal System
+Kaj7j	y, Zagorovsky Line
+M9i	0Cortlever Gambit
+MtjMc	0Taimanov Line
+Myq	0Smith-Morra Line
+Jr	lQuiet System
+GJR	SKatalimov Variation
+HZ	SPolish Gambit
+GLT	SModern Variations
+I2uJZ	SKotov Gambit
+I9Z	SMoscow Variation
+KBS8+CL70OWkc	i, Dorfman Gambit
+KCL	kMain Line
+MZLDLyi	kSokolsky Variation
+Jr	SKopec System
+Ixh	SWing Gambit, Deferred Variation
+Iyq	SDelayed Alapin Variation, with d6
+KGV90BSzjajqjVk	sBasman-Palatnik Gambit
+Izj	Q
+KGV	Q: Modern Variations, Anti-Qxd4 Move Order
+MjaVk	5 Accepted
+Kaj	Q
+M7j	Q: Chekhover Variation
+OBS9ZDL	l, Zaitsev Defense
+MtjGV	SModern Variations, Main Line
+Q1t	SPrins Variation
+SMc9Z	h, Venice Attack
+Q5qBS	SClassical Variation
+U2u	l, Fianchetto Variation
+U6e	SRichter-Rauzer Variation
+WCL	q, Modern Variation
+WMU	q
+U90	SClassical Variation
+WMc	SBoleslavsky Variation
+Vi	SClassical Variation, Sozin Attack
+SCL	SKupreichik Variation
+SIQ	SNajdorf Variation
+U/+	j, Petronić Attack
+U1l	lAmsterdam Variation
+U2m	lDekker Gambit
+Vu	lZagreb Variation
+U3v	lAdams Attack
+U6e	j
+WMU	j
+Vs	j, English Attack
+WVm	z, Anti-English
+U90	lOpocensky Variation
+WMU	SScheveningen Variation, Classical Variation
+Vi	SNajdorf Variation, Lipnitsky Attack
+Vr	lYates Variation
+SMc9Z	SVenice Attack
+SOW	SDragon Variation
+U1l	i, Levenfish Variation
+WBL	3, Main Line
+U2u	kFianchetto Variation
+U6s	i
+U90	i, Classical Variation
+Q9i	SModern Variations, Ginsberg Gambit
+OOW	SDragon Variation, Accelerated Dragon
+Myq	SModern Variations, Tartakower
+GMU	SFrench Variation
+I5qIQ2uJZzjajtj	SKan Variation, Wing Attack, Fianchetto Variation
+Ixh	SWing Gambit Deferred
+Jp	SFrench Variation, Westerinen Attack
+Iyi	SKramnik Variation
+Jq	SDelayed Alapin Variation, with e6
+KGVkcVbzjBS	SAlapin Variation, Sherzer Variation
+KLbkbDbzjGV	SDelayed Alapin Variation
+IzjIQ	Trazic Variation
+KLb	SMarshall Counterattack
+Kaj	SFrench Variation, Open
+MtjBS	STaimanov Variation
+Q5q	k
+SDK	k, Bastrikov Variation
+U6s	5, English Attack
+SGV	SFour Knights Variation
+UjS	o, Exchange Variation
+VZFa	qCobra Variation
+WLT	qSveshnikov Transfer
+SIQ	STaimanov Variation
+SLT90GV	SScheveningen Variation, Modern Variation
+QjZ	STaimanov Variation, Szén Variation
+ODR	SKveinis Variation
+OFa	SPaulsen-Basman Defense
+OGV	SFrench Variation, Normal
+Q5qDR	SGaw-Paw Variation
+SFh	SPin Variation
+U9rUc	f, Jaffe Variation
+Ukc	hKoch Variation
+SLT	SScheveningen Variation
+U1l	o, Matanovic Attack
+U2m	qKeres Attack
+Vu	qFianchetto Variation
+U90	qClassical Variation
+VZ	qVitolins Variation
+Vi	Tozin Attack
+OIQ	SKan Variation
+Q5q	f, Knight Variation
+SJZ	hWing Attack
+Q9r	hModern Variation
+SFa	hPolugaevsky Variation
+SOW	hSwiss Cheese Variation
+Qyi	hMaróczy Bind, Réti Variation
+SOW	vHedgehog Variation
+Myq	SSmith-Morra Gambit Deferred
+Hc	SJalalabad Variation
+GNd	SBrussels Gambit
+IkdGX	SDouble-Dutch Gambit
+GOW	SHyperaccelerated Dragon
+IyiFX	SActon Extension
+JqFOzjDY	APterodactyl Defense: Western, Pterodactyl
+Izj	ASicilian Defense: Hyperaccelerated Dragon
+KFO	jPterodactyl
+M5qDY	AModern Defense: Pterodactyl Variation
+Q6s	APterodactyl Defense: Sicilian, Anhanguera
+Rz	fUnpin
+Qjb	fBenoni Gambit
+MjaDY	VWestern, Rhamphorhynchus
+Q5q	VSicilian, Rhamphorhynchus
+SOqxq	fPteranodon
+WYq	ASicilian Defense: Hyperaccelerated Pterodactyl, Exchange Variation
+KNd	SFrederico Variation
+GPX	SBücker Variation
+Fv	Trick Variation
+E1l	SMcDonnell Attack
+GLb+tbk	ABird Opening: Dutch Variation, Batavo Gambit
+I5q	ASicilian Defense: McDonnell Attack, Toilet Variation
+IkbGV	lal Gambit
+GMc	AKing's Gambit Declined: Mafia Defense
+E2m	ASicilian Defense: Grob Variation
+Fu	SLasker-Dunne Attack
+E3n	SMyers Attack, with h4
+E5o	SKronberger Variation
+GBSzjaj9i	m, Nemeth Gambit
+Fq	SClosed
+GBS	Y, Traditional
+I+0	aChameleon Variation
+I1l	SGrand Prix Attack
+KOW+tFO9iMUld	j, Schofman Variation
+I2m	SClosed, Grob Attack
+Ju	aFianchetto Variation
+KOW	Y
+M92FO	Y
+QzrLT	Y
+U+0Mc	Y, Botvinnik Defense, with Nge2
+U1l	Y
+WMc	Y, Botvinnik Defense, with f4
+U6s	Y
+IzrOW2m	Y, Portland Attack
+GLTzjaj7jBSjz	aCarlsen Variation
+GMU	Y
+I2u	Y
+KLb	Y, Korchnoi Defense
+E7m	SAmazon Attack
+E80	SKing David's Opening
+E9i	SBowdler Attack
+Ewg	SMyers Attack, with a4
+Fo	Tengarini Variation
+Exh	SWing Gambit
+Gah6x	d, Abrahams Variation
+Iwo	fMarshall Variation
+KLbkbDb6x	iienbad Variation
+Kho	fCarlsbad Variation
+Iyi	fSantasiere Variation
+Fp	SCzerniak Attack
+GJR	h, Queen Fianchetto Variation
+GLb6x	SEuwe Attack, Prins Gambit
+Eyi	SStaunton-Cochrane Variation
+GLT5qBS2uPf	SGloria Variation
+Fq	SAlapin Variation
+GGVkcVb+tBS5o	SHeidenfeld Variation
+Q9ibRip	SAlapin Variation, Stoltz Attack
+Mzjaj	lmith-Morra Declined
+GLbkbDb	kBarmen Defense
+MzjBS+t	y
+OGV+tCm	y, Modern Line
+OOW+t	y
+OajqjBS+tCm	y, Central Exchange
+KGV	kAnti-Alapin Gambit
+Ezj	SSmith-Morra Gambit
+Gaj+t	SMorphy Gambit
+KMcyq	f, Andreaschek Gambit
+I1l	SHalasz Gambit
+I7jBSj7GV9i	SColes Sicilian Gambit
+Iyq	SSmith-Morra Gambit
+KDY	k Declined, Wing Formation
+KGV	vAlapin Formation
+KLb	vScandinavian Formation
+KMc	vCenter Formation
+Kjq	lAccepted
+M+t	t, Danish Variation
+M5qBS+tLT9iMU	vScheveningen Formation
+WOW	vFianchetto Defense
+SMU9iDK	vSiberian Variation
+WFa	vMorphy Defense
+Xh	vPin Defense
+WIQ	waulsen Formation
+SOW	vFianchetto Defense
+OLT+tOW	8fense
+OMU+tIQ	vKan Formation
+Q9iIQ+tGM	vTaimanov Formation
+OOW	vFianchetto Defense
+Lr	lDeclined, Push Variation
+Mqi	vDubois Variation
+FrBSyqLT1l	SBig Clamp Formation
+CLT	APirc Defense
+E1l	ARat Defense: Harmonist
+GTbkbGV	NFuller Gambit
+E2m	NSpike Attack
+E3n	NPetruccioli Attack
+Ezj	APirc Defense
+GBL	ARat Defense: Antal Defense
+GGV	APirc Defense
+I+t	M: Roscher Gambit
+I1t	ALion Defense: Lion's Jaw
+I5qBL	M
+M1l	M: Anti-Philidor
+OMc	b, Lion's Cave
+M2m	OBayonet Attack
+KKS	ACzech Defense
+KOW	APirc Defense
+M+t	M: Classical Variation
+OFO	h
+Q3v	h, Schlechter Variation
+Q90	jQuiet System
+SEG8+BS	v, Chigorin Line
+WCm	xParma Defense
+WKS	xCzech Defense
+M1l	OAustrian Attack
+OFO+tEG	d
+U6s	d, Kurajica Variation
+U9r	fWeiss Variation
+Ukc	fUnzicker Attack
+SKa	fDragon Formation
+Q9i	fLjubojevic Variation
+M2u	OSveshnikov System
+M6e	OByrne Variation
+NsKS3v	O150 Attack, Sveshnikov-Jansa Attack
+Q7z	Y
+SCm	Y, Inner Doll Defense
+M90FO2m	OChinese Variation
+Q3n	OBayonet Attack
+Ni	OKholmov System
+GMc	AKing's Pawn Game: Maróczy Defense
+GNd	ARat Defense: Balogh Defense
+Db	AScandinavian Defense
+E+t	AZukertort Opening: Tennison Gambit
+GbkteGV5qCd70Dj	i, Brigg's Trap
+E5qbkqkMc	AVan Geet Opening: Grünfeld Defense
+EkbDb	AScandinavian Defense: Mieses-Kotroc Variation
+I5qbD	WValencian Variation
+MzjGV+tCm	p, Main Line
+SKS	rIlundain Variation
+LT	WGubinsky-Melts Defense
+MzjGV+tIQ	WBronstein Variation
+OKS	WSchiller-Pytel Variation
+LY	WMain Line
+Mxh	f, Leonhardt Gambit
+MzjGV	hMieses Variation
+Q+tCd	WClassical Variation
+Tm3v	WLasker Variation
+OMc	WAnderssen Counterattack
+Q+t	t, Goteborg System
+SCm	vCollijn Variation
+GGV	WModern Variation
+IyiKS	WPanov Transfer
+KMU	WIcelandic-Palme Gambit
+Izj	WModern Variation
+KCm	WPortuguese Gambit
+M+t	n, Classical Variation
+M1tmd2m	qorrespondence Refutation
+Q9ZBL5q	pMelbourne Shuffle Variation
+Uyi	pJadoul Variation
+Qyi	pBanker Variation
+M90	pWuss Variation
+NZBLZ0	pLusophobe Variation
+OKS	pElbow Variation
+KKSbSMc	WKádas Gambit
+KOW	WRichter Variation
+MyiJZ	WModern Variation, Wing Gambit
+KVb	Xarshall Variation
+M+tCm	Xodern Variation, Gipslis Variation
+OOW	WRichter Variation
+Myibh	WKiel Variation
+GKS	WBlackburne-Kloosterboer Gambit
+IbSBS	g Gambit
+KMc	WKloosterboer Gambit
+GMcbUCU	WBoehnke Gambit
+Exh	WZilbermints Gambit
+Fp	U
+CMU	AFrench Defense
+E+t	O: Knight Variation
+GLb5q	QTwo Knights Variation
+IkcKaxh	QWing Gambit
+GNd	QKnight Variation, Franco-Hiva Gambit
+E1l	QLa Bourdonnais Variation
+GLb+tbk	o, Reuter Gambit
+E2u	QRéti-Spielmann Attack
+E5q	QQueen's Knight
+GLb1l	QPelikan Variation
+E70	QChigorin Variation
+E9Z	QBird Invitation
+Ekc	QSteinitz Attack
+Exh	QBanzai-Leong Gambit
+GFhkc	j, Pinova Gambit
+Fp	QHorwitz Attack
+GLb6x	e, Papa-Ticulat Gambit
+Eyi	QSteiner Variation
+GLbibUb7p	QOrthoschnapp Gambit
+Ezj	QNormal Variation
+GGV	QMediterranean Defense
+GIQ	QSt. George Defense
+I+tJZ9rKayqCJ8+GV	i, Traditional Line
+Iyi	lhree Pawn Attack
+KJZ	kSanky-George Gambit
+MiZQZ	lt. George Gambit
+GJZ	QBaeuerle Gambit
+GKa	QFranco-Sicilian Defense
+Ijb	ABenoni Defense: French Benoni
+GLb	AFrench Defense
+I+t	O: Perseus Gambit
+Kbktc	QCarlson Gambit
+Jv	QMorphy Gambit
+I5q	QPaulsen Variation
+KBS	QHecht-Reefschläger Variation
+KFh	QWinawer Variation
+M+0	h, Alekhine-Maróczy Gambit
+OGV6e	QMcCutcheon Variation, Wolf Gambit
+Obkwohq	QWinawer Variation, Alekhine Gambit Accepted
+U0qBS	y, Kan Variation
+M6z	jFingerslip Variation
+OGMq5	3, Schwarz's Line
+Obk7mDj	5Kunin Double Gambit
+M9rKakbDb6z	jKondratiyev Variation
+Mkb	jDelayed Exchange Variation
+OUb9rGM7f	jExchange Variation, Canal Attack
+Nc	jAdvance Variation
+ODL	jPetrosian Variation
+OKa	jAdvance Variation
+Q6z	jBogoljubow Variation
+SGM1l	3, Icelandic Defense
+Q7m	jAdvance Variation, Moscow Variation
+Qwo	0
+Sajohjq	jMaróczy-Wallis Variation
+ShY	jRetreat Variation
+Uxhaj	0, Armenian Line
+Tqxq	jAdvance Variation
+WDK	jClassical Variation
+XY	jPortisch-Hook Variation
+WGM	jAdvance Variation
+Mwohqxqbk1t	jWinckelmann-Reimer Gambit
+KGV	QClassical Variation
+M6e	j
+OFM	j, Normal Variation
+QeV	lRichter Attack
+QkcVG	lVistaneckis Variation
+UesJR	lFrankfurt Variation
+TL3n	QAlekhine-Chatard Attack
+WEG	n, Spielmann Variation
+WIQ	pMaróczy Variation
+WKa	pBreyer Variation
+WNV	pTeichmann Variation
+UeMDM	QClassical Variation
+Tk	j, Tartakower Variation
+Ph	QMcCutcheon Variation
+Qkb	k, Exchange Variation
+Rc	mAdvance Variation
+SPXcV	mChigorin Variation
+Ue6	mDr. Olland Variation
+Vn	mBernstein Variation
+Vs	mJanowski Variation
+VzVL	mTartakower Variation
+Whq	mLasker Variation
+Obk	QClassical Variation, Burn Variation
+QqkFM	j
+UeVOV	j, Burn Variation, Morozevich Line
+Ns	QHenneberger Variation
+M9r	QClassical Variation, Swiss Variation
+Mkb	lDelayed Exchange Variation
+OUb6e	QExchange Variation, Svenonius Variation
+Nc	QClassical Variation, Steinitz Variation
+OVL1lKa+t	QSteinitz Variation
+UjaBS	i
+Q7m	i, Gledhill Attack
+Qq0	QClassical Variation, Shirov-Anand Variation
+KIQ+tGVkcVL	QSteinitz Variation
+U6e	QClassical Variation
+Uq0	QSteinitz Variation
+Uwo	i
+KKa	QMarshall Gambit
+Kbk	QRubinstein Variation
+MqkBL	k, Blackburne Defense
+OCL+tLS	mFort Knox Variation
+ODb	mMaric Variation
+OUc	mEllis Gambit
+Jz	QTarrasch Variation
+KBS	i, Guimard Defense
+M+tGV	z, Main Line
+MyqbkzkUc	1Thunderbunny Variation
+KFM	kMorozevich Variation
+KGV	kClosed Variation
+MkcVL1l	kPawn Center Variation
+Q9rKayqBS	kClosed Variation
+WJR	kBotvinnik Variation
+KIQ	kModern System
+KKa	kOpen System
+M+t	v, Euwe-Keres Line
+MkbDb	kChistyakov Defense
+Q+taj9ibD	kEliskases Variation
+OGV	kOpen System, Shaposhnikov Gambit
+OUb	v
+Q+tBS	v, Main Line
+Sai	xAdvance Line
+Myq	xSüchting Line
+KNd	kHaberditz Variation
+I6s	QAlapin Gambit
+I70Uc1lcl	QHoffmann Gambit
+I9r	QSchlechter Variation
+Ikb	QExchange Variation
+KUb+t	i
+M5q	i
+OGV6eBS	i, Bogoljubow Variation
+Myi	kMonte Carlo Variation
+Jc	QAdvance Variation
+KCL	h, Extended Bishop Swap
+KKa	h
+M+t	h, Nimzowitsch System
+Oaj9r	jRuisdonk Gambit
+M7m	jNimzowitsch Attack
+Oaj+t	vGambit
+Mja	jSteinitz Variation
+Mxh	jFrenkel Gambit
+Myq	h
+OBS	h
+Q+t	h, Paulsen Attack
+SCL	jEuwe Variation
+SDR9r	jMilner-Barry Gambit
+Uwo	kain Line
+WGX	jLputian Variation
+Q6s	jKupreichik Variation
+ODR+tCL	jWade Variation
+Iyi	QDiemer-Duhm Gambit
+Kbk	i Accepted
+GNd	QFranco-Hiva Gambit
+Ikd	i Accepted
+Fr	QKing's Indian Attack
+GLb5zGV+tBS90	QReversed Philidor Formation
+GNd	QKing's Indian Attack, Franco-Hiva Gambit
+Dc	AKing's Pawn Game
+E+0	Q: Alapin Opening
+Ft	HKnight Opening
+GBS	V: Normal Variation
+I2u	XKonstantinopolsky
+I5q	AThree Knights Opening
+KFh	V
+MqbGV	V: Schlechter Variation
+KGV	AFour Knights Game
+M2u	R: Glek System
+M9Z	TSpanish Variation
+OFa	k, Classical Variation
+Ph	mDouble Spanish
+Q8+EGZS	mNimzowitsch Variation
+Uzr	mDouble Spanish
+WLT	mSymmetrical Variation
+Whq	k
+OIQZS	k, Ranken Variation
+OSj	nubinstein Variation
+QZ0	6
+RgFatcEG	6, Marshall Gambit
+QtcFa8+EG	8Marshall Variation
+Rj	6 Accepted
+Mqb	TNaroditsky Variation
+Mtc	THalloween Gambit
+Mwo	TGunsberg Variation
+OLT3v	l, Provincial Opening
+Mzj	TScotch Variation
+OFhjbSj	j, Oxford Gambit
+Qtc	lKrause Gambit
+SDM	y, Leonhardt Defense
+Ocj	j Accepted
+Qqb	j, Belgrade Gambit
+SVk70Nd	0, Modern Defense
+QtjVk	lSchmid Defense
+KNd	AThree Knights Opening: Winawer Defense
+KOW	XSteinitz Defense
+Mzjcjqb	f-Rosenthal Variation
+I90	AKing's Pawn Game: Tayler Opening
+KGVzj	g
+Ocjkc	g, Basman Gambit
+NrLb5z	iInverted Hanham
+JZ	ARuy Lopez
+KDM	J: Vinogradov Variation
+KFM	LLucena Variation
+La	LClassical Variation
+M8+Sjxh	VDefense, Zaitsev Variation
+Mxh	VVariation, Spanish Wing Gambit
+Myq	gCentral Variation
+ODM	VDefense, Boden Variation
+OLb	VVariation, Konikowski Gambit
+ONd	gCordel Gambit
+OaR	hharousek Variation
+Lh	LAlapin Defense
+MyqhYZSLS	Z, Alapin Gambit
+KGM	LCozio Defense
+M5qOW	Y, Paulsen Variation
+LV	LBerlin Defense
+M8+	Z
+OFa	Z, Beverwijk Variation
+Qyq	LClassical Variation, Zukertort Gambit
+SEGzjaR	VDefense, Benelux Variation
+OLT	LBerlin Defense, Improved Steinitz Defense
+QzjCL5qFM	bHedgehog Variation
+Wcj	bClosed Wolf Variation
+SVL	LClosed Berlin Defense, Chigorin Variation
+OVk	LBerlin Defense, Rio Gambit Accepted
+QzjFM	fde Janeiro Variation
+U70Lb	bTrifunovic Variation
+Ujc	bMinckwitz Variation
+SIQ	bRosenthal Variation
+SkT	bl'Hermet Variation
+UZg	LOpen Berlin Defense, Showalter Variation
+Ujc	gl'Hermet Variation
+Pm	LBerlin Defense, Fishing Pole Variation
+Mtc	LHalloween Attack
+Mzjcj8+	LBerlin Defense, Nyholm Attack
+Nr	bAnti-Berlin Variation
+OFa6s	w, Kaufmann Variation
+OLTZS	yAnderssen Variation
+Qyi	yDuras Variation
+OSM	yMortimer Variation
+QtcKS	7Trap
+KIQ	LMorphy Defense
+MZS	LExchange Variation
+OJS	d, Lutikov Variation
+OLS5q	fKeres Variation
+SNVzr	fRomanovsky Variation
+Q8+	fNormal Variation
+SCm3vPf	fAlapin Gambit
+SDT	fBronstein Variation
+SFT	fKing's Bishop Variation
+SNV	fGligoric Variation
+NgFa	LMorphy Defense, Classical Defense Deferred
+Ph	bAlapin's Defense Deferred
+OGM	bCozio Defense
+PV5q	bTarrasch Variation
+Q70	bWormald Attack
+Q8+	Z
+SFM	LClosed
+U5q	R, Morphy Attack
+U70	TWorrall Attack
+U98LT	TAverbakh Variation
+UgS	TDelayed Exchange
+Uzj	TCenter Attack
+Vr	TMartinez Variation
+Ta	LMorphy Defense, Møller Variation
+SJZgpCJ	bArkhangelsk Variation
+WFa	bNeo-Arkhangelsk Variation
+WLT	Z
+SLT	Z, Steinitz Deferred
+Tb	LCentral Countergambit
+SOW	LBrix Variation
+SVk	LOpen
+U5q	P, Knorre Variation
+U70	LMorphy Defense, Tartakower Variation
+U98Lb	LOpen, Skipworth Gambit
+Uzj	P
+Wcj	P, Riga Variation
+QgS	LMorphy Defense, Bayreuth Variation
+Qyq	bJaffe Gambit
+Qzj	bMackenzie Variation
+Rr	bAnderssen Variation
+SLTyi	bDuras Variation
+OJZ	bCaro Variation
+QgpFa	bGraz Variation
+SSY	bNorwegian Variation
+UpN	u, Nightingale Gambit
+OLT	bModern Steinitz Defense
+Q5q	y
+Q8+	y
+QgSJSzj	y
+WNV	y
+Qyi	y
+Rq	y
+SCL	y
+UzjGM	y
+SNd	y, Siesta Variation
+ONd	bSchliemann Defense Deferred
+Qkd	2, Jaenisch Gambit Deferred
+OOW	bFianchetto Defense Deferred
+OSj	LBird's Defense Deferred
+LY	Mulgarian Variation
+KJR	LRotary-Albany Gambit
+KLT	LSteinitz Defense
+Mzj	b
+OCL5qGVZS	b, Nimzowitsch Attack
+Qyi	dSemi-Duras Variation
+Ocj8+	dCenter Gambit
+Lb	Mpanish Countergambit
+MtcDe8+	g, Harding Countergambit, Fricke Gambit
+QcS	qGambit
+KNV	LNürnberg Variation
+Ld	LSchliemann Defense
+M5q	d, Dyckhoff Variation
+OdkqkFM	fKostić Defense
+SGV	fTartakower Variation
+MZS	fExchange Variation
+Mkd	fJaenisch Gambit Accepted
+Mzj	fSchönemann Attack
+KOW	LFianchetto Defense
+MyqIQZgLTzjCL	LMorphy Defense, Modern Steinitz Defense, Fianchetto Variation
+ONd	LFianchetto Defense, Kevitz Gambit
+Le	LBrentano Gambit
+KSB	LRetreat Variation
+LY	LPollock Defense
+Lj	LBird Variation
+Mtjcj8+GM	Z, Paulsen Variation
+Ji	AItalian Game
+KFM	M: Hungarian Defense
+Mzjcj	AScotch Game: Benima Defense
+QyqGVkcVk	AItalian Game: Hungarian Defense, Tartakower Variation
+La	OGiuoco Piano
+M5qGV	AFour Knights Game: Italian Variation
+Q8+EG	AItalian Game: Giuoco Pianissimo
+Uzr	f
+M8+GVyq	OClassical Variation, Albin Gambit
+Qzj	ODeutz Gambit
+RrEGyqLb	OClassical Variation, Giuoco Pianissimo
+SIYyq	0, with a5
+SLTyq	0
+WEG	0
+WIQ	0
+XY	0
+WPX	0, with h6
+WaR	0
+SPXyq	0
+MiN	OJerome Gambit
+Mxh	OEvans Gambit
+OJZ	a, Fontaine Countergambit
+OLb	cHein Countergambit
+OaR	a Declined
+Q6x	j, Cordel Variation
+QhZSYtcDe	lHirschbach Variation
+WGX	lLange Variation
+Qwg	j
+SIQ5q	j, Showalter Variation
+Ph	bAccepted
+QyqhF	a, Mayet Defense
+TM	cAnderssen Variation
+UzjSY	v, Cordel Line
+TT	cStone-Ware Variation
+TY	cMain Line
+U8+	cSlow Variation
+WLT	a
+UzjGV	a, Laroche Variation
+WJZ	deonhardt Countergambit
+WLT	cBronstein Defense
+Wcj	cPierce Defense
+Ta	cMcDonnell Defense
+Myq	OClassical Variation
+ODM	h, Closed Variation
+QzjaR	kenter Holding Variation
+U6e	jMestel Variation
+OGV	h
+Qxh	OBird's Attack
+Qzj	OClassical Variation, Center Attack
+Scj8+	OScotch Gambit, Walbrodt-Baird Gambit
+Ukc	OClassical Variation, Greco Gambit, Modern Line
+WLb	8
+Uqj	xTraditional Line
+Uxh	xDubov Italian
+Rr	kiuoco Pianissimo
+SIQ	0, with a6
+SLT	0
+U5zIQ	0, with a6
+Uxh	2Albin Variation
+Tb	jwith d5
+OLTzjcjqjaR	jLa Bourdonnais Variation
+Mzj	ORosentreter Gambit
+Nr	OGiuoco Pianissimo
+OGV5q	f, Italian Four Knights Variation
+SLT6e	hCanal Variation
+ONd	hLucchini Gambit
+Qtedl	hDubois Variation
+KGV	OTwo Knights Defense
+M5q	AFour Knights Game: Italian Variation
+OVkiN	k, Noa Gambit
+QqkLb	AItalian Game: Two Knights Defense
+M8+Fa5qLTzr	OGiuoco Pianissimo
+Mte	OTwo Knights Defense, Knight Attack
+OFa	jTraxler Counterattack
+QeN	4, Knight Sacrifice Line
+QiN	6Bishop Sacrifice Line
+SEMzj	rVariation, Trencianske-Teplice Gambit
+OLb	jKnight Attack, Normal Variation
+QkbJZ	jUlvestad Variation
+SSY	jPolerio Defense
+UiZ	y, Bishop Check Line
+Uzr	0Kieseritzky Variation
+Th	jKloss Gambit
+Tj	jFritz Variation
+SVbeN	med Liver Attack
+Uzj	jLolli Attack
+WFh	jPincus Variation
+OVk	konziani-Steinitz Gambit
+Mzj	jOpen Variation
+OLT	OScotch Invitation Declined
+Ocj	AScotch Game: Scotch Gambit, Dubois Réti Defense
+Q8+	AItalian Game: Scotch Gambit
+SVk	b, Double Gambit Accepted
+U5q	dNakhmanson Gambit
+QkcLbiZVk	dMax Lange Attack
+SVm	AScotch Game: Scotch Gambit, Kingside Variation
+Qte	AItalian Game: Two Knights Defense, Perreux Variation
+Nr	jModern Bishop's Opening
+OFM	6
+Pa	OGiuoco Pianissimo, Normal
+OPX8+LT	OTwo Knights Defense, Modern Bishop's Opening
+KLT	OParis Defense
+KNd	ORousseau Gambit
+KPX	OAnti-Fried Liver Defense
+KSj	OBlackburne-Kostić Gambit
+Itc	Brish Gambit
+KSczj	AKing's Pawn Game: Schulze-Müller Gambit
+Ixh	SPachman Wing Gambit
+Iyi	SDresden Opening
+KGVtc	ADresden Opening: The Goblin
+Jq	APonziani Opening
+KFM	Q: Romanishin Variation
+KGM	Téti Variation
+LV	SJaenisch Counterattack
+M9i	SNeumann Gambit
+MzjVkjbFa	SVukovic Gambit
+Nr	SJaenisch Counterattack
+OLb	o
+Q5z	o
+KLb7gCL	SCaro Gambit
+OGV	SLeonhardt Variation
+ONV	SSteinitz Variation
+M9Z	Tpanish Variation
+ObktcDb7g	j, Harrwitz Attack, Nikitin Gambit
+KNd	SPonziani Countergambit
+MzjLTjb	o, Schmidt Attack
+Izj	AScotch Game
+KSj	L: Lolli Variation
+Mtjcj7j	c
+Q9i	NNapoleon Gambit
+Kcj	L
+M9Z	L: Relfsson Gambit
+Ni	NScotch Gambit
+OFa	NHaxo Gambit
+Q8+LTyqCm	NScotch Gambit, Cochrane-Anderssen Variation
+Qte	cSarratt Variation
+SGX7f	NVitzthum Attack
+Ph	NScotch Gambit, London Defense
+OGV8+FM	AItalian Game: Scotch Gambit, de Riviere Defense
+Ta	dMax Lange Attack
+Ukc	OTwo Knights Defense, Max Lange Attack
+WVm	OScotch Gambit, Max Lange Attack, Spielmann Defense
+SLT	dJanowski Defense
+Qkc	AScotch Game: Scotch Gambit, Advance Variation
+Mtj	L
+ODn	L: Steinitz Variation
+Q5q	f
+SFh	NModern Defense
+Q6s	NBraune Variation
+QjZ	NHorwitz Attack
+SFh6z	L
+Rd	L: Paulsen Variation
+Rt	NFraser Variation
+OFa	NClassical Variation
+Q6sDVjZ	NBlumenfeld Attack
+UyqVW	NClassical Variation, Millennium Variation
+QjSDV	iIntermezzo Variation
+Rp	NPotter Variation
+Sah	NRomanishin Variation
+Ph	NMalaniuk Variation
+OGV	NSchmidt Variation
+QjSJS5z	NTartakower Variation
+Ukc	NMieses Variation
+Qkc	NAlekhine Gambit
+OSj7jLT9r	NGhulam-Kassim Variation
+Myq	Oöring Gambit
+OLb	NScotch Gambit, Göring Gambit Declined
+Ojq5qFh	NGöring Gambit, Main Line
+Q9i	cDouble Pawn Sacrifice
+SGV5qFh	cBardeleben Variation
+JrNdkd	ALatvian Gambit: Clam Gambit
+GDM	AGunderam Defense
+I9iNd	AKing's Pawn Game: Gunderam Defense, Gunderam Gambit
+HV	SMcConnell Defense
+I9iVW8+	SLa Bourdonnais Gambit
+GFa	SBusch-Gass Gambit
+ItcBS	j, Chiodini Gambit
+GGV	APetrov's Defense
+I5q	Q: Three Knights Game
+KBS9ZSj8+	AFour Knights Game: Spanish Variation, Rubinstein Variation, Henneberger Variation
+QtcDM1l	6
+I70BSzj	APetrov's Defense: Moody Gambit
+I9i	SItalian Variation
+KVk5q	ABishop's Opening: Boden-Kieseritzky Gambit
+OLb	q, Lichtenhein Defense
+Itc	APetrov's Defense
+KBS	Q: Stafford Gambit
+McSLS	h Accepted
+Q5qFa	q
+QzrFa	q
+KLT	Q
+McN	Q: Cochrane Gambit
+OEN9i	h, Bishop Check Line
+Qzj	jCenter Variation
+Ni	SPaulsen Attack
+Nr	SKarklins-Martinovsky Variation
+Nt	Q
+OVk	Q
+Q5q	Q: Nimzowitsch Attack
+Q70	SCozio Attack
+Q9r	SMillennium Attack
+Qyi	SKaufmann Attack
+Qzj	SClassical Attack
+STb9rBS	i, Mason-Showalter Variation
+WFT	mrshall Variation
+SkV	kClosed Variation
+Rr	SFrench Attack
+KVk	SDamiano Variation
+M70DM	j, Kholmov Gambit
+Izj	SModern Attack
+KLb	f, Symmetrical Variation
+KVk9r	hCenter Variation
+OBS	hMurrey Variation
+Kcj	f
+MkcVk70	f, Steinitz Variation
+SkatjBS	hBardeleben Variation
+Rj	hCenter Attack
+Q9Z	hTal Gambit
+GKS	AKing's Pawn Game: Gunderam Gambit
+GLT	APhilidor Defense
+I9i	Q
+KFM	Q
+Myq	Q: Steinitz Variation
+KNd	SLopez Countergambit
+Izj	Q
+KBL	Q: Hanham Variation
+M5qGV2m	SLion Variation, Shirov Gambit
+M9iKS5q	SHanham Variation, Schlechter Variation
+Q8+	kKrause Variation
+SFMjc	kSteiner Variation
+Qte	Y, Kmoch Variation
+Qyq	Y Variation, Delmar Variation
+OLR	kSharp Variation
+KCL	SPhilidor Gambit
+LmjcBL	SAlbin-Blackburne Gambit
+KGV	SNimzowitsch Variation
+M5qBL	SLion Variation
+Q90FM8+KS	g, Lion's Claw, with Be2 and c6
+RiFM8+PX	1c4 and h6
+UiN	iBishop Sacrifice
+M9i	SNimzowitsch Variation, Klein Variation
+Mjc	n
+OVk5z	n, Sokolsky Variation
+Q7b	pRellstab Variation
+Mte	d, Locock Variation
+KNd	SPhilidor Countergambit
+M5q	o, Zukertort Variation
+M9icjteGXeP	SLopez Countergambit, Jaenisch Variation
+MjcdkteTbcU	SPhilidor Countergambit, del Rio Attack
+Kcj	SExchange Variation
+M7jCL	SBoden Variation
+M9i	SMorphy Gambit
+Mtj	SExchange Variation
+OGV	k
+OOW	SLarsen Variation
+OTbkb	SPaulsen Attack
+Myq	SBird Gambit
+Hb	AElephant Gambit
+IkbFT	P: Maróczy Gambit
+Kck	RPaulsen Countergambit
+Itcbk9iDe	RWasp Variation
+GNV	AKing's Pawn Game: Damiano Defense
+ItcDMctLb	h, Damiano Gambit, Chigorin Gambit
+KVc7fOWfcDMcH	x
+Hd	ALatvian Gambit
+I2m	O: Lobster Gambit
+I5q	QMlotkowski Variation
+I9i	Rayet Attack
+KGV	c, Morgado Defense
+KJZ	eStrautins Gambit
+KdktcDezje2	ePoisoned Pawn Variation
+OGV	QCorkscrew Countergambit
+OLb	QMayet Attack, Polerio-Svedenborg Variation
+Ikd	O Accepted
+ItcBS	O: Fraser Defense
+KDM	QGreco Variation
+LVci	O Accepted: Foltys-Leonhardt Variation
+Odk5q	ZLeonhardt Variation
+Qzr	ZFoltys Variation
+Mzj	ZMain Line
+OLTci	ZBilguer Variation
+Sdk90	aronstein Attack
+Uis	ZNimzowitsch Attack
+KGV9idkcNDMNHLb	O: Corkscrew Gambit
+Ixh	QSenechaud Gambit
+Iyi	QDiepstraten Countergambit
+Izj	QMason Countergambit
+E1l	AKing's Gambit
+GBS	N Declined: Queen's Knight Defense
+I+tNd	YMiles Defense
+KOe	YZilbermints Double Gambit
+MlePX	YHobbs-Zilbermints Gambit
+GDV	YNorwalde Variation
+I5qVl+tFh9i	q, Bücker Gambit
+Mzj	sSchubert Variation
+Hn	YKeene's Defense
+I2u	n
+KnM	d Defense
+GFa	YClassical Variation
+I+tLT5qBL	h, Hanham Variation
+Mlc	jSoldatenkov Variation
+Mxh	h Variation, Rotlewi Countergambit
+Myq	r
+OCmlcTc7g	r, Euwe Attack
+ONd	tRubinstein Countergambit
+KOe	YSenechaud Countergambit
+I7f	YClassical Variation, Walthoffen Attack
+GGV	YPetrov's Defense
+GLb	YFalkbeer Countergambit
+I+t	u, Blackburne Attack
+I5q	wMilner-Barry Variation
+Kbkqk	AVan Geet Opening: Grünfeld Defense, Steiner Gambit
+Ikb	AKing's Gambit Declined: Falkbeer Countergambit Accepted
+KFa	u, Miles Gambit
+KKS	wNimzowitsch-Marshall Countergambit
+MbSFa	wPickler Gambit
+Kck	wStaunton Line
+M5qGV70	wRubinstein Variation
+M9Z	wAnderssen Attack
+Mzr	wCharousek Gambit
+OGV5z	8mbit, Keres Variation
+Q70	8mbit, Old Line
+Qrk	8mbit Accepted
+SVk70	8mbit
+Ll	wModern Transfer
+Izj	wHinrichsen Gambit
+GNVlcBS	YSoller-Zilbermints Gambit
+Hd	YPanteldakis Countergambit
+IkdDn	x, Greco Variation
+KFa	zSchiller's Defense
+Kcl+tLbzjFT9r	0ymmetrical Variation
+M7fEM	0hirazi Line
+OOWdWDM87	zPawn Sacrifice Line
+GOe	YZilbermints Double Countergambit
+Gcl	OAccepted
+I+0	W: Paris Gambit
+Jt	YKing's Knight's Gambit
+KBS	YMacLeod Defense
+M9iOe	YBlachly Gambit
+KFM	YCunningham Defense
+M9iGV	q, McCormick Defense
+OMn2u	sBertin Gambit
+KGM	YBonsch-Osmolovsky Variation
+LV	YSchallopp Defense
+MkcVf2m	p, Tashkent Attack
+KLT	YFischer Defense
+M9iPXzjOe3nFO	YGreco Gambit
+Mxh	YFischer Defense, Schulder Gambit
+MzjGV9r	qpanish Variation
+Lb	YModern Defense
+Mkb	m
+OGV	YAbbazia Defense
+KNd	YGianutio Countergambit
+KOe	YKing's Knight's Gambit
+M3n	u
+Oemtc	aeseritzky Gambit
+SBS	q, Neumann Defense
+SDM	sRosenthal Defense
+SFM	j, Polerio Defense
+TO	j Gambit, Paulsen Defense
+SGV	sBerlin Defense
+UcmLb	6, de Riviere Variation
+Uzj	8Rubinstein Variation
+SLT	sKolisch Defense
+Tb	sBrentano Defense
+SPf	sLong Whip
+Re	YAllgaier Gambit
+SGV	g, Schlechter Defense
+SPXeN	YKieseritzky Gambit, Cotter Gambit
+M5q	YQuaade Gambit
+M9i	YKing's Knight's Gambit
+OFO	YTraditional Variation
+Q3n	YPhilidor Gambit
+Q8+	YHanstein Gambit
+QzjLTyq	YMayet Gambit
+Oem3n	YAustralian Gambit
+Q5q	YMcDonnell Gambit
+Q8+	Zuzio Gambit, Wild Muzio Gambit
+SDM	mKling and Horwitz Counterattack
+SLb	mBrentano Defense
+Smt7tBS	mHolloway Defense
+WDM	k Accepted, From's Defense
+XV	k, Sarratt Defense
+QiN	YLolli Gambit
+Qtc	YSalvio Gambit
+SDn89BS	l, Viennese Variation
+WGV	nSanta Maria Defense
+XX	oilberschmidt Defense
+Wlt	nCochrane Gambit
+Qzj	YGhulam-Kassim Gambit
+Smt6l	YKotov Gambit
+U7t	YGhulam-Kassim Gambit
+Mzj	YRosentreter Gambit
+Oem5q	q, Sörensen Gambit
+Q6l	sTesta Variation
+Qtc	YSörensen Gambit
+SDn2u	YRosentreter Gambit, Bird Gambit
+KPX	YBecker Defense
+Lf	YWagenbach Defense
+Jv	YEisenberg Variation
+I2u	YGaga Gambit
+I3n	YStamma Gambit
+I5q	YMason-Keres Gambit
+I70	YBasman Gambit
+Jf	YCarrera Gambit
+Jm	YDodo Variation
+Jt	YBreyer Gambit
+I81	YTumbleweed
+I90	Zartakower Gambit
+KNdkdLT	p, Weiss Defense
+JZ	YSchurig Gambit, with Bb5
+Ji	YBishop's Gambit
+KBS	n, Maurian Defense
+KDn89BS	pBoden Variation
+OFa	pGreco Variation
+OGM5qOezjFO	pClassical Defense
+PV	pFirst Jaenisch Variation
+OJZ	pBryan Countergambit
+OLT	pCozio Variation
+PbibOe2u	qhigorin's Attack
+OOe	pLopez Variation
+Q5qFO2u	pMcDonnell Attack
+Q7t	pClassical Defense, Cozio Attack
+KGM	pSteinitz Defense
+LV	pCozio Defense
+M5q	pBogoljubow Variation
+OFhkc	pPaulsen Attack
+OKS	pBogoljubow Defense
+KJZ	pKieseritzky Gambit
+KKS	pLopez Defense
+KLb	pBledow Variation
+MibDn89FT	qoren-Svenonius Variation
+OGV	qledow Countergambit
+OKS	pAnderssen Variation
+KNd	pGianutio Gambit
+M70Dn87dk5qED	YLopez-Gianutio Countergambit, Hein Variation
+KOe	YBishop's Gambit, Anderssen Defense
+Jr	YSchurig Gambit, with Bd3
+Ixp	YOrsini Gambit
+Izj	YVillemson Gambit
+Ft	HPawn Game: King's Head Opening
+GGV5q	l
+E5q	AVienna Game
+GBS	L: Max Lange Defense
+I1l	Kbit, with Max Lange Defense
+KFalcLT	l: Quelle Gambit
+Kcl+t	nKnight Variation
+OFM	nCunningham Defense
+OOe3nemte	nHamppe-Allgaier Gambit
+WLT	8t, Alapin Variation
+Q9iem8+	Ke: Hamppe-Muzio Gambit
+Wmt	Kbit, with Max Lange Defense: Hamppe-Muzio Gambit
+Qzj	nPierce Gambit
+Mzj	nSteinitz Gambit
+ODn80	2, Main Line
+SJR	4Fraser-Minckwitz Defense
+SLT	4Paulsen Defense
+Tb	4Zukertort Defense
+SOe	4Sörensen Defense
+I2u	Ke: Paulsen Variation
+KFa92Pf+tfn	e, Mariotti Gambit
+KGV92Fa+0Lb	e
+I9iFa7mDVqb	NStanley Variation, Meitner-Mieses Gambit
+KGV	gThree Knights Variation
+M1lVk+t	gBronstein Gambit
+MzrFh+0	ABishop's Opening: Vienna Hybrid, Hromádka Variation
+Izj	AVienna Game: Fyfe Gambit
+KNd	NPhilidor Countergambit
+GFa	NAnderssen Defense
+I7m	NGiraffe Attack
+Iqg	NHamppe-Meitner Variation
+Hh7mGV	NZhuravlev Countergambit
+GGV	NFalkbeer Variation
+I1l	NVienna Gambit
+KLb	a, Main Line
+MkbckzrFh6zks	AKing's Gambit Declined: Falkbeer Countergambit, Charousek Gambit, Morphy Defense
+MlcVk+tCm70	AVienna Game: Vienna Gambit, Kaufmann Variation
+SFM	cBreyer Variation
+Q7t	cPaulsen Attack
+SNd	cBardeleben Variation
+Uzj	NHeyde Variation
+Qzr	NVienna Gambit, Modern Variation
+Mzr	cSteinitz Variation
+I2u	NMieses Variation
+KFa92BS+0Lbkb	NPaulsen Variation, Pollock Gambit
+KLbkbKS	NMieses Variation, Erben Gambit
+I9i	NStanley Variation
+KFa+0JZ	e, Eifel Gambit
+Mzr	ABishop's Opening: Vienna Hybrid, Spielmann Attack
+Lh	AVienna Game: Stanley Variation, Reversed Spanish
+KVk	NFrankenstein-Dracula Variation
+M7fkTipBSzj	NAdams' Gambit
+SFM	NStanley Variation, Monster Declined
+Iwo	NMengarini Variation
+GLT1l	NOmaha Gambit
+E70BSyqGV+tFazjcjqjSj	AKing's Pawn Opening: Van Hooydoon Gambit
+Ff	MGame: Wayward Queen Attack
+GBS9iGXzrOWftNV+0Lb	m, Mellon Gambit
+GGV	oKiddie Countergambit
+FmGVmd	MOpening: Speers
+Ft	MGame: Napoleon Attack
+E80	ABongcloud Attack
+E9Z	APortuguese Opening
+GFaxh	S: Miguel Gambit
+GGVzj	UPortuguese Gambit
+Fi	ABishop's Opening
+GFa	Q: Boi Variation
+I1l	SStein Gambit
+I70	SLopez Variation
+KBSyqGV1l	YGambit
+KGV1l	YVariation, Lopez Gambit
+Ixh	SMcDonnell Gambit
+Kah1l	i, McDonnell Double Gambit
+Myq	kLa Bourdonnais-Denker Gambit
+Iyq	SPhilidor Variation
+KDe	Sdel Rio Variation
+KLb	SLewis Countergambit
+MibGV	l
+Qzj	l, Walker Variation
+Izj	YGambit
+GGV	SBerlin Defense
+I+0Vk0q	SPachman Gambit
+I1l	SBerlin Defense, Greco Gambit
+JtFa+0BSxh	SKrejcik Gambit
+I5qJZ	SHorwitz Gambit
+Izj	SPonziani Gambit
+Kcj+t	SUrusov Gambit
+OLbkbFhyqDM	f, Panov Variation
+OVk7j	hKeidansky Gambit
+Myq	SWarsaw Gambit
+JrBS5q	SVienna Hybrid
+KFM+tEG	SKitchener Folly
+KKS	SPaulsen Defense
+GJZiZKS	SAnderssen Gambit
+KNd	SThorold Gambit
+GKS	SPhilidor Counterattack
+GLb	SKhan Gambit
+GNd	SCalabrese Countergambit
+Izr	p, Jaenisch Variation
+Fr	AKing's Pawn Game: Tortoise Opening
+Ewo	SMengarini's Opening
+Exp	MOpening
+Eyi	AEnglish Opening: The Whale
+GLb	AKing's Pawn Game: Bavarian Gambit
+Fq	SMacLeod Attack
+GLb7fFT	g, Norwalde Gambit
+GNd	iLasa Gambit
+Ezj	ACenter Game
+GLTjcCL	AKing's Pawn Game: Philidor Gambit
+Hb	SBeyer Gambit
+Gcj	ACenter Game Accepted
+I+t	L: Kieseritzky Variation
+KFayq	NLanc-Arnold Gambit
+Ojq9i	f, Schippler Gambit
+KKa	NKieseritzky Variation
+M9i	i
+I1l	NHalasz-McDonnell Gambit
+KFa+tBSyq	k, Crocodile Variation
+I7j	L
+KBS	L: Normal Variation
+Mji	NHall Variation
+Ns	NPaulsen Attack Variation
+OFhyqhM	NCharousek Variation
+OGV	NBerger Variation
+ONd	Nl'Hermet Variation
+I9i	Nvon der Lasa Gambit
+Jr	NRoss Gambit
+Iyq	ADanish Gambit
+KGM	N Accepted: Svenonius Defense
+KLb	ODeclined: Sörensen Defense
+Kjq	OAccepted
+M9iqx6xDM	W: Chigorin Defense
+SFh	Zopenhagen Defense
+SGV	Zlassical Defense
+SLb	YSchlechter Defense
+Fr	AKing's Pawn Game: Leonardis Variation
+GGV1lFa	SClam Variation, Radisch Gambit
+GLbkbKSbSBS	SWeber Gambit
+GNd	SClam Variation, King's Gambit Reversed
+CNV	ABarnes Defense
+EzjEN	AFried Fox Defense
+GJRyiCJ	AOwen Defense: Unicorn Variation
+Dd	ADuras Gambit
+COW	AModern Defense
+E+tFOzjKa9iajtjDY	APterodactyl Defense: Western, Siroccopteryx
+E5qFO1lKa+tDY	VAustrian, Grand Prix Pterodactyl
+E9iFO7tMUzjOj	AModern Defense: Bishop Attack, Monkey's Bum
+EzjFO	O
+I+tJR	O: Mongredien Defense, with Nf3
+KKa6sDY	APterodactyl Defense: Western, Anhanguera
+KLTyq	AModern Defense: Geller's System
+I1l	QThree Pawns Attack
+KKa+tDY	APterodactyl Defense: Austrian, Austriadactylus Western
+MyqDY	fPteranodon
+I2uKa+tDY	VFianchetto, King Pterodactyl
+MjaDY	hRhamphorhynchus
+I5q	AModern Defense: Standard Line
+KJR	QMongredien Defense, with Nc3
+KKS+tLT	QTwo Knights Variation, Suttles Variation
+M1lLbkcPf	QGurgenidze Defense
+M9iLT70	QAnti-Modern
+La	QModern Pterodactyl
+M+tDY90LT	APterodactyl Defense: Sicilian, Quetzalcoatlus
+Ri	fSiroccopteryx
+M6s	VEastern, Anhanguera
+MjaDY	eRhamphorhynchus
+OOqxqDY	ePteranodon
+NbOqxqDY	eBenoni Pteranodon
+KLT	AModern Defense: Standard Defense
+M+t	QTwo Knights Variation
+OKS6eDR7zRx	l, Suttles Variation, Tal Gambit
+M1l	QPseudo-Austrian Attack
+Lb	QLizard Defense, Mittenberger Gambit
+I6z	QWestermann Gambit
+I9i	QBishop Attack
+KJZ	d, Bücker Gambit
+Jr	QWind Gambit
+IyiKa+tLT90DY	QSemi-Averbakh Variation, Pterodactyl Variation Declined
+M5qLT6sDY	APterodactyl Defense: Central, Anhanguera
+QjaDY	eQuetzalcoatlus Gambit
+MjbLT5qDY	eBenoni Quetzalcoatlus
+KLbkbKSbSOj	AModern Defense: Dunworthy Variation
+GGV	QNorwegian Defense
+IkcVf90LT	h, Norwegian Gambit
+HX5qNd6XFXkdEG	QMasur Gambit
+GLT5qKS	ARat Defense: Accelerated Gurgenidze
+GNd	AModern Defense: Fianchetto Gambit
+De	ABorg Defense
+EzjFO	M: Borg Gambit
+GMc	OZilbermints Gambit
+GPX3nem	OTroon Gambit
+CPX	ACarr Defense
+EzjMc	M: Zilbermints Gambit
+Df	AGoldsmith Defense
+EzjGV	R: Picklepuss Defense
+Bs	AVan't Kruijs Opening
+CMc5qBS1lcl+t	U: Keoni-Hiva Gambit, Alua Variation
+GGV1lcl+t	qkahi Variation
+GLb1lcl+t	pEkolu Variation
+E9iJZip	WBouncing Bishop Variation
+EyiLT5qBSxpGV	AAmsterdam Attack
+A1l	ABird Opening
+CGV+tOWxh	M: Batavo-Polish Attack
+Eyi	OMujannah
+DX	OHorsefly Defense
+CJZ	OMyers Defense
+CLb	ODutch Variation
+E+tGV0sKa	OLasker Variation
+E0k	OWilliams Gambit
+Gbk5qGV+0	W-Zilbermints Gambit
+M70	W Gambit
+E2m	ODutch Variation, Dudweiler Gambit
+ExpGV6xbj+tKa0s	OThomas Gambit
+Eyi	OSturm Gambit
+CMc	OFrom's Gambit
+E5q	b, Bahr Gambit
+ElcBS	OSchlechter Gambit
+GGM	OPlatz Gambit
+GLTcTFT+tGXzj	OFrom's Gambit, Lipke Variation
+OOe	easker Variation
+KGV	fngheld Gambit
+GNV	OLasker Gambit
+Ezjcj+tKayq	OSiegener Gambit
+CNd0k	OWagner-Zwitersch Gambit
+Gdk5qGV2m	OSwiss Gambit
+EzjLb	ODouble Duck Formation
+COe	OHobbs Gambit
+CPX+tOe	T-Zilbermints Gambit
+Bt	Barnes Opening
+CLb0kOWzjbkyq	O: Gedult Gambit
+CMc0kGV9i	QWalkerling
+E2mDn	QFool's Mate
+E81	QHammerschlag
+CNd0kdk5q	QGedult Gambit
+A2m	AGrob Opening
+CLb0kbk5q	M: Zilbermints Gambit
+KMczr	g, Zilbermints-Hartlaub Gambit
+KPf	iSchiller Defense
+E3vMc92KS	OKeene Defense
+MzjckyiFT5qGM	b, Main Line
+E92	OGrob Gambit
+GCmyi	Z, Fritz Gambit
+Kbj	ORomford Countergambit
+M2JBLJADA	OGrob Gambit, Fritz Gambit, Romford Countergambit
+GKS	Z Declined
+Ime	OSpike Attack
+Iyibixp	OGrob Gambit, Richter-Grob Gambit
+GMczjcjyq	bKeres Gambit
+GPfmf	bBasman Gambit
+CMc3vBS	OLondon Defense
+E92Lbyi	OSpike, Hurst Attack
+CNd	OAlessi Gambit
+COe	ODouble Grob
+E1l	Z, Coca-Cola Gambit
+Bu	AHungarian Opening
+CBS5qLbzjMcjcbjqkNd	R: Asten Gambit
+CGV	TIndian Defense
+CKa	TSicilian Invitation
+CLb+tOe	TWiedenhagen-Beta Gambit
+E92KS	TSlav Formation
+Ha	TReversed Modern Defense
+GMU	TCatalan Formation
+Hcxh	TBücker Gambit
+Iyibixp	TWinterberg Gambit
+CMc+t	TReversed Alekhine
+Gckt+GVxh	cBrooklyn Defense, Brooklyn Benko Gambit
+Jn	cNorwegian Defense
+FvLb1lCv9vcl8+	TParis Gambit
+EwoLb+tcktnFMzr	TBurk Gambit
+CNd	TDutch Defense
+E0kdk7fOW	TPachman Gambit
+COW	TSymmetrical Variation
+De	TMyers Defense
+CPf	ALasker Simul Special
+E+tfn	AHungarian Opening: Van Kuijk Gambit
+A3n	AKádas Opening
+CIY	N: Koola-Koola Variation
+CKaxh	Qádas Gambit
+CLb/v	PBeginner's Trap
+EzjKa+tajyq	PKádas Gambit
+I0k	PMyers Variation
+CMczjcjyq	PKádas Gambit
+CNd0kdkzr	PSteinbok Gambit
+COe	Qchneider Gambit
+Bv	AClemenz Opening
+CLbwoMc	Breepy Crawly Formation: Classical Defense
+CMcwo	AGlobal Opening
+CPf2m	AClemenz Opening: Spike Lee Gambit
+A5o	ASodium Attack
+CMcoiBS0kNd	N: Durkin Gambit
+EzrFoxoLb0sKa45	PCeladon Variation
+COW2m	Qhenoboskion Variation
+Bq	AVan Geet Opening
+CGV2m	Q: Tübingen Gambit
+CJZ	SLaroche Gambit
+CKa+tBSzjajtj	SSicilian Two Knights
+E45	STwyble Attack
+Exh	SDüsseldorf Gambit
+Ezjaj7jBSjn	SNovosibirsk Variation
+CLT1lMclcBS	SHergert Gambit
+Db0kbk1t	SDougherty Gambit
+I9i	SHector Gambit
+Izr	SDunst-Perrenet Gambit
+FsMczjFh	SSleipnir Gambit
+E1lMc	SDamhaug Gambit
+GOe	SWarsteiner Gambit
+GbjqkKa	SMelleby Gambit
+KMc	SPfeiffer Gambit
+M+t	h, Sleipnir Countergambit
+KNdk1GV+tKaxh	SJendrossek Gambit
+EzrGV2u	SVenezolana Variation
+CMc	SReversed Nimzowitsch
+E+tBSzj	SNapoleon Attack
+GFa	SBillockus-Johansen Gambit
+E0sLb7fCU	SHulsemann Gambit
+KGV	SLiebig Gambit
+E1lcl0k	SNowokunski Gambit
+ExpLb0kbkzr	SGladbacher Gambit
+Ezjcj7jBSjg	SReversed Scandinavian
+CNd0kdkzr	SKluever Gambit
+COW3n	SMyers Attack
+Awg	AWare Opening
+CIY	M: Symmetric Variation
+CJRzjLb5qBL	OCologne Gambit
+DZgZCJ	OWing Gambit
+CMc3n	OCrab Variation
+E4o	OMeadow Hay Trap
+EgYLb0sNdYQ	OWare Gambit
+Bo	AAnderssen's Opening
+CIYxh	T: Polish Gambit
+CMc5q	AVan Geet Opening: Battambang Variation
+Axh	APolish Opening
+CBS	O: Grigorian Variation
+CGV6xOW	QKing's Indian Variation
+I0k	n, Schiffler Attack
+IyiFO0sLT+tEGzj	qokolsky Attack
+DX	Rarniewski Variation
+CJZ	QSymmetrical Variation
+CKS	QOutflank Variation
+E6xIYhZ	i, Schuehler Gambit
+KSZ0k	QSchuehler Gambit
+Da	QBirmingham Gambit
+CLb	O, with d5
+E+t	AZukertort Opening: Santasiere's Folly
+E6xCd	APolish Opening: Baltic Defense
+GDT	QGerman Defense
+GGV+t	O, with d5
+GKSwg	O: Myers Variation
+CMU6xGVhZIQ	QQueenside Defense
+MwgQZgZA4x4	QRooks Swap Line
+KJR	QQueen's Indian Variation
+KLb0s	QSchiffler-Sokolsky Variation
+Dc6xKa	QWolferts Gambit
+GLT	QCzech Defense
+GNV0k	QTartakower Gambit
+IhZ	QBugayev Advance Variation
+Ewo	Zttack
+CNd	QDutch Defense
+Bp	ANimzo-Larsen Attack
+CGV	T: Indian Variation
+E6xOW2m	VSpike Variation
+CJR	Wymmetrical Variation
+DZ	VPolish Variation
+CKa	VEnglish Variation
+CLb	VClassical Variation
+E6o	VGraz Attack
+CMc	VModern Variation
+E6xBS	l
+I0s	l
+I1l	VPachman Gambit
+IyiGV	VModern Variation
+CNd	VDutch Variation
+E6xMU0k	VRingelbach Gambit
+Ayi	AEnglish Opening
+CBS	P: Anglo-Lithuanian Variation
+CGV	XIndian Defense
+E+t	l, King's Knight Variation
+GJR	nQueen's Indian Formation
+GKSxpLb6xCm	ARéti Opening: Anglo-Slav Variation, Capablanca Variation
+Q0s	4
+Qzr	4
+Ha5qBS2uOW92FO	AEnglish Opening: Symmetrical Variation, Full Symmetry Line
+GLT	RAnglo-Indian Defense, Old Indian Formation
+Hb	nScandinavian Defense
+IibVb	7, Exchange Variation
+GMU2uIQ92JZ	RRomanishin Gambit
+GOW	RAnglo-Indian Defense, King's Indian Formation
+I2uJR92CJ	8on, Double Fianchetto
+KKS	nSlav Formation
+KLb	nGrünfeld Formation
+Ixh	Jrangutan
+E0k	Jpening: Achilles-Omega Gambit
+E2uKS+tLbxp	ARéti Opening: Anglo-Slav Variation
+OCd	i, London Defensive System
+Q6x	7
+Q92	7
+SMU6x	7
+Pm	kTorre System
+Q6x	w
+Q92	w
+SMU6x	w
+Obi	kwith dxc4
+GOW92FOzjLbibVb+t	ANeo-Grünfeld Defense: Exchange Variation
+E5q	AEnglish Opening: Anglo-Indian Defense, Queen's Knight Variation
+GKa2u	RSymmetrical Variation, Fianchetto Variation
+KLbibVb92bK	oRubinstein Variation
+GLb	RAnglo-Grünfeld Defense
+IibVb+t	XIndian Defense, Anglo-Grünfeld Variation
+OKa0sMU	l
+OOW	l, Anglo-Grünfeld Variation
+Q2uFO92Mc	XGrünfeld Defense, Korchnoi Variation
+M2uOW92bR	XIndian Defense, Anglo-Grünfeld Variation
+Tq	8ion
+GMU	nHedgehog System
+I+tFh	nNimzo-English
+GOW+tFO0k	nAnti-Anti-Grünfeld
+Exh	Jrangutan
+EzjKa+t	Jpening: Symmetrical Variation, Anti-Benoni Variation
+CJZ	RJaenisch Gambit
+CKS	RCaro-Kann Defensive System
+E+tLb0s	ARéti Opening: Anglo-Slav Variation, Gurevich System
+KGV5qBL7y	z
+QxpMc	z
+OMUxpFT	z
+M7y	z
+I2uGV92	kwith g3
+OCd	r
+Q8+MUzr	r
+Obi	r
+MxpOW	r
+Da	AEnglish Opening: Symmetrical Variation
+E+t	m
+GBS2uOW92FO8+LT5q	m, Three Knights, Fianchetto Variation
+SMU5q	8hetto Variation
+I5qGV0sMUzjLbibUb	ATarrasch Defense: Symmetrical Variation
+GGV5qBS	AEnglish Opening: Symmetrical Variation, Four Knights Variation
+M2uLbzjMU	AQueen's Gambit Declined: Semi-Tarrasch Defense
+Saj	AEnglish Opening: Symmetrical Variation
+OMU	m, Four Knights Variation, Keres-Parma System
+KLbibVb2uBS92bK	oRubinstein Variation
+Ixh	oNapolitano Gambit
+E0kBS5qOW2uFO92	oBotvinnik System
+E2uOW92FO5qBS	oUltra-Symmetrical Variation
+E5q	oNormal Variation
+GBS	oTwo Knights Variation
+I2u	z, Fianchetto Variation
+KOW92FO+t	phree Knights, Fianchetto Variation
+SMc	oBotvinnik System Reversed, with Nf3
+U8+GM	8ersed, with Nf3
+WLT	8ersed, with Nf3
+Q0sMc	8ersed, with e3
+GGV+t	oThree Knights Variation
+KMc	m
+Exh	RWing Gambit
+CLb	RAnglo-Scandinavian Defense
+EibDb5qbY	r, Malvinas Variation
+GGV	tSchulz Gambit
+GMU	tLöhn Gambit
+CMU	Sgincourt Defense
+E+t	i
+GGV2uIQ	Snglo-Indian Defense, Romanishin Variation
+KJR92CJ	nQueen's Indian Formation
+KLb92KS	Sgincourt Defense, Catalan Defense, Semi-Slav Defense
+Obi	z Accepted
+I5qKa2uJR92CJ8+FM	RSymmetrical Variation, Hedgehog Defense
+MzjBS2uajtjDR	oAnti-Benoni Variation, Geller Variation
+OajtjBS	8n, Spielmann Defense
+IxpLb6xKa0s	RAgincourt Defense, Wimpy System
+GLb	i
+I2uGV	RNeo-Catalan
+M92FM	c Declined
+Q8+	RAgincourt Defense, Neo-Catalan Declined
+SEGxp	4
+Qxp	4, Early b3
+SJR	8rly b3
+SKa	8rly b3
+QzjEG8+KS	ACatalan Opening: Closed
+PT	AEnglish Opening: Agincourt Defense, Bogoljubow Defense
+OJR8+	AKing's Indian Attack: Yugoslav Variation
+OKaxpBS8+FM	AEnglish Opening: Agincourt Defense, Tarrasch Defense
+KJR92CJ8+	kCatalan Defense
+KKS	kKurajica Defense
+La	kCatalan Defense
+IxpGV6xFM0sEG	i
+Uzj	i
+E5qGV+tFh2m	Snglo-Indian Defense, Zvjaginsev-Krasenkow Attack
+KJR	nQueen's Indian Formation
+M0kCJ9r	2Variation
+I0k	RMikenas-Carls Variation
+KBS	o
+KKa	e, Sicilian
+MkcVG	RAnglo-Indian Defense, Flohr-Mikenas-Carls Variation, Nei Gambit
+KLbkc	RMikenas-Carls Variation
+EzjJR5qCJ0kNdjb	IDefense: Hartlaub Gambit Declined
+QkdGV	hAccepted
+GKa+tajtjGV	IOpening: Symmetrical Variation, Anti-Benoni Variation, Spielmann Defense
+Dc	RKing's English Variation
+E+t	p, Nimzowitsch Variation
+Gck	2-Flohr Variation
+E0sGV1lcl+t	rKahiko-Hula Gambit
+E2uGV92BS5qFh0kLT+0	rReversed Closed Sicilian
+WCm	8icilian
+Qqb	8icilian
+KLbibVb+tBS	rFour Knights Variation, Fianchetto Line
+Uzr	8ation, Fianchetto Line
+GPf	RDrill Variation
+E5q	RKing's English Variation, Reversed Sicilian
+GBS	0Closed Sicilian
+I+t	rThree Knights System
+I2uLT92CU	sroger Defense
+KOW45GX92FO	RClosed, Taimanov Variation
+M92FO	RKing's English Variation, Taimanov Variation
+Q0sLT+0CU	rBremen-Hort Variation
+WGX	RClosed, Taimanov Variation
+Q45	RKing's English Variation, Hungarian Attack
+Qzr	rClosed System
+SLT	4, Full Symmetry
+U0k	rBotvinnik System
+GFh	rKramnik-Shirov Counterattack
+GGV	rTwo Knights Variation
+I+tBS	rFour Knights Variation
+M0k	RFour Knights System, Nimzowitsch Variation
+Ns	RKing's English Variation, Four Knights Variation, Quiet Line
+OFh7yhq	8ation, Quiet Line
+M2u	8ation, Fianchetto Line
+OFazrLT92	8ation, Fianchetto Line, with .. d6
+WIQ	8ation, Fianchetto Line, with .. d6, a6
+WPX	8ation, Fianchetto Line, with .. d6, h6
+Ph	8ation, Fianchetto Line
+OLbibVb92Fa	8ation, Fianchetto Line, with Bc5
+WbR	8ation, Fianchetto Line, with Nb6
+Mwo	8ation, Korchnoi Line
+Mzjck	8ation, Bradley Beach Variation
+Nr	8ation, Flexible Line
+KckteJZ	rBellon Gambit
+OKS	rAdhiban Gambit
+OVm	f, Erbenheimer Gambit
+I1l	hMazedonisch
+I2u	RCarls-Bremen System
+KBS92LTzrFM+tEG	RKing's English Variation, Four Knights Variation, Fianchetto Line, with .. d6, Be7
+KFa92KS	rTwo Knights Variation, Keres Variation
+Lh	8tion, Smyslov System
+M0kEG+0BS92	rReversed Closed Sicilian
+KKS	rTwo Knights Variation, Keres Variation
+KLb	8tion, Reversed Dragon
+KOW	8tion, Fianchetto Line
+GLT+t	p
+KCm	p, Smyslov Defense
+I2uKS	rKeres Defense
+CNd	RAnglo-Dutch Defense
+E+tLT0k	dVariation, Chabanon Gambit
+E0k	dDefense, Hickmann Gambit
+E2m	RWade Gambit
+E5qGV0k	RAnglo-Dutch Variation, Ferenc Gambit
+Kdk2m	RPorcupine Variation
+COW	RGreat Snake Variation
+E0kMc	RAdorjan Defense
+De	RMyers Defense
+EzjFO	XGambit
+GMc	RZilbermints Gambit
+Bq	ASaragossa Opening
+Azj	AQueen's Pawn Game
+CBQ	AAustralian Defense
+DS	AMikenas Defense
+EjbSB	Bontevideo Defense
+I0kGVkcVG	AZaire Defense
+EyiMcjbSM	AMikenas Defense: Lithuanian Variation
+Lj	RCannstatter Variation
+JcSc5qci	RPozarek Gambit
+CGV	AIndian Defense
+E+t	O: Knights Variation
+GIQ	h, Alburt-Miles Variation
+GJR	APseudo Queen's Indian Defense
+I0sCJ9rMU5zKaxpFM	d
+I2uCJ92Ka	AMarienbad System
+Qyiaj7j	Q: Berg Variation
+IyqMc	AIndian Defense: Schnepper Gambit
+HZ	QPolish Variation
+GKS	QCzech-Indian
+Ha	QSpielmann-Indian
+IjbJZ	QPseudo-Benko
+Kai	ABenoni Defense: Hawk Variation
+GLT	AIndian Defense: Wade-Tartakower Defense
+Hb6lKa0sDR5q	ALondon System: Poisoned Pawn Variation
+GMU0s	AYusupov-Rubinstein System
+KJR9rCJ8+Kayi	AQueen's Indian Defense, with e3
+WFM	f
+WOW	f
+KKa9rLbxp	ARubinstein Opening
+Qyq	AQueen's Pawn Game: Colle System, Traditional Colle
+I5qLb6e	TVeresov Attack, Classical Defense
+I6e	ATorre Attack: Classical Defense
+KKa0k	OWagner Gambit
+NsJRjb	OClassical Defense, Petrosian Gambit
+KLb0sKayqDR	AQueen's Pawn Game: Torre Attack, Breyer Variation
+KPX	ATorre Attack: Classical Defense, Nimzowitsch Variation
+Jl	AIndian Defense: London System
+IyiLb6eKS5zBL0s	AQueen's Gambit Declined: Capablanca Variation
+GOW	AEast Indian Defense
+I0sFO9rLT	AIndian Defense: Colle System, King's Indian Variation
+I2u	QPrzepiorka Variation
+KFO92EG8+Lbyi	ANeo-Grünfeld Defense: Classical Variation
+WBS	p, Polgar Variation
+Wbi	rModern Defense
+I5qLb6l	AQueen's Pawn Game: Barry Attack
+OFO	f
+Q0sEG90	f, Grünfeld Variation
+Q7z	hTarzan Attack
+I6e	ATorre Attack: Fianchetto Defense
+KFO5zKa	g, Euwe Variation
+OLb0sEG	AQueen's Pawn Game: Torre Attack, Grünfeld Variation, Main Line
+Jl	ALondon System
+KFO0s	N
+OLT	N
+Q3vKa90	N, with Be2
+Q90	X
+SEG	X
+Rr	Vd3
+Iyi	AKing's Indian Defense: Normal Variation, King's Knight Variation
+KFO5qEG0sLT90BS	XSemi-Classical Variation, Hollywood Variation
+GVk	ADöry Defense
+E0k	AIndian Defense: Omega Gambit
+GVk9rkV6e	c, Arafat Gambit
+E1l	ACanard Opening
+Ft	APaleface Attack
+GLb0k	AIndian Defense: Paleface Attack, Blackmar-Diemer Gambit Deferred
+I2m	QGedult Attack
+I5q	AQueen's Pawn Game: Veresov, Richter Attack
+E2m	AIndian Defense: Gibbins-Weidenhagen Gambit
+GMc	q, Oshima Defense
+GVm	q Accepted
+I0kLT90mV5q	q, Stummer Gambit
+I1tmV0k	sMaltese Falcon
+Fu	QTartakower Attack
+E5qKa	QReversed Chigorin Defense
+GLb	AQueen's Pawn Game: Chigorin Variation
+I0k	THübsch Gambit
+I6e	ARichter-Veresov Attack
+KBL+t	W: Two Knights System
+OOW	q, Grünfeld Defense
+KCd	W
+M1t	W: Richter Variation
+MeV	YVeresov Variation
+KKaeVOV0kbkjb	YMalich Gambit
+KVk	YBoyce Defense
+I7r	AAmazon Attack: Siberian Attack
+GMc	AIndian Defense: Maddigan Gambit
+FzMc	QLazard Gambit
+E6e	ATrompowsky Attack
+GKajbDR5q	R: Poisoned Pawn Variation
+GMU	TClassical Defense
+I0k	k, Big Center Variation
+GVk3n	TRaptor Variation
+KkeneMc	j, Hergert Gambit
+IelOe	TBorg Variation
+Jn	TEdge Variation
+KLb1tkV5qCd0k	h, Hergert Gambit
+Fl	AIndian Defense: Accelerated London System
+Ejb	QPawn Push Variation
+Exp	ABasque Opening
+Eyi	AIndian Defense: Normal Variation
+GBS	AMexican Defense
+IjbSc1l	P: Horsefly Gambit
+GJR	AQueen's Indian Accelerated
+HZ	AIndian Defense: Pyrenees Gambit
+GKS	ASlav Indian
+Ha	ABenoni Defense
+IjaMU	O: Weenink Variation
+JbJZ	Dko Gambit
+M+t	M Declined: Main Line
+M0k	XHjørring Countergambit
+M1t	XPseudo-Sämisch
+M2m	M: Mutkin Countergambit
+M5z	M Declined: Quiet Line
+M6e	XBishop Attack
+MiZIQ	NAccepted
+Q0s	V: Modern Variation
+Q1t	XDlugy Variation
+Q5q	M: Zaitsev System
+QZQ	M Accepted: Fully Accepted Variation
+RR	XPawn Return Variation
+Mwg	NDeclined: Sosonko Variation
+KLT	Doni Defense: Hromádka System
+KMU	QModern Variation
+M5qUbibFT	g, Snake Variation
+SLT0k	QKing's Pawn Line
+Lc	QCzech Benoni Defense
+M5qLT0kOW	QKing's Indian System
+KVk	AVulture Defense
+GLT	AOld Indian Defense
+I+tCm	S: Tartakower-Indian
+KKS	UCzech Variation, with Nf3
+I2m	UAged Gibbon Gambit
+I5qBL0kMc+t	UNormal Variation
+KCd	UJanowski Variation
+M0k	m, Grinberg Gambit
+M1t	oMain Line
+M2u	oFianchetto Variation
+KKS	UCzech Variation, with Nc3
+KMc	UUkrainian Variation
+M+t	UTwo Knights Variation
+M0sBL9r	UDuz-Khotimirsky Variation
+GMU+t	AIndian Defense: Anti-Nimzo-Indian
+KFh	ABogo-Indian Defense
+M5qKajbJZ	ANimzo-Indian Defense: Three Knights Variation, Shocron Gambit
+Nz	ABogo-Indian Defense: Grünfeld Variation
+OJR0sCJ	AQueen's Indian Defense, with e3, Bb4+ Line
+M6zBS	ABogo-Indian Defense: Haiti Variation
+ODM	VNimzowitsch Variation
+OIY	VWade-Smyslov Variation
+Q2uJR92CJ	AQueen's Indian Defense: Yates Variation
+OKa	ABogo-Indian Defense: Vitolins Variation
+OhM	VRetreat Variation
+Pz	VExchange Variation
+Mtz	VNew England Variation
+KIQ	AIndian Defense: Dzindzi-Indian Defense
+KJR	AQueen's Indian Defense
+M0s	W: Spassky System
+OCJ	m
+Q9r	m
+SKa	m3
+SLb	m
+M2u	YFianchetto Variation
+OCJ	s, Traditional Line
+Q92FM	YTraditional Variation
+U5q	YAnti-Queen's Indian System
+U8+	YClassical Variation
+Th	Zapablanca Variation
+U6zhM	YRiumin Variation
+SKa	YFianchetto Variation, Sämisch Variation
+PQ	uNimzowitsch Variation
+Q7g	8riation, Nimzowitsch Attack
+Rp	8riation, Timman's Line
+Qxp	8riation, Quiet Line
+SFh	uCheck Variation
+U6zDM	8n, Modern Line
+WhM	8n, Intermezzo Line
+M5q	YKasparov Variation
+OFh6ePXenCJ	q
+M6l	YMiles Variation
+Mwo	YPetrosian Variation
+OCJ5q	YKasparov-Petrosian Variation
+SFM	0, Marco Defense
+SLb	4in Line
+UibUb	2Classical Variation
+WVb	2Modern Variation
+SOW	2Hedgehog Variation
+SVk	2Andersson Variation
+PQ7yQJ	YPetrosian Variation, Farago Defense
+KKajbJZ	ABlumenfeld Countergambit
+Q6e	Y: Duz-Khotimirsky Variation
+SUbibPX	aSpielmann Variation
+QbUNUiZLb	Y Accepted
+OUbibLT5qOW	Benoni Defense
+KLb0sFM5qEGxpJR	AQueen's Indian Defense, with e3
+QxpEG9rJR	f
+OJR5qCJ	f
+SFT9r	f
+UibUb	IGambit Declined: Exchange Variation
+M2uFM92EG8+bi	ACatalan Opening: Open Defense, Classical Line
+OKS92bi	d
+M5q	AQueen's Gambit Declined: Three Knights Variation
+OBL	ZBarmen Variation
+Q6ePXenbi	ZKnight Defense, Alekhine Gambit
+QibUb6l	ZExchange Variation, Sämisch Variation
+OFM6eEG0s	ZModern Variation, Normal Line
+WBL	ZOrthodox Defense
+WPX	ZNeo-Orthodox Variation
+U7y	ZMiles Variation
+Rl	ZHarrwitz Attack
+SEG0sBL	o, Two Knights Defense
+Ph	ZRagozin Defense
+Q6eBL0sKa	ZWestphalian Variation
+Sbi	ZRagozin Defense, Vienna Variation
+Q7g	qAlekhine Variation
+OKa	ZSemi-Tarrasch Defense
+Qib	u
+SVb0k	u, Exchange Variation
+Vs	wPillsbury Variation
+U2u	u
+Obi	ZThree Knights, Vienna Variation
+Q0s	ZVienna Variation, Quiet Variation
+M6e	ZTraditional Variation
+OFh	ZVienna Variation
+OPX	ZCapablanca Variation
+KVk	AIndian Defense: Döry Indian
+I2m	Revin Gambit
+Ju	ACatalan Opening
+KFh6zhM92Lb+t	ABogo-Indian Defense: Retreat Variation
+WEG	m
+KLb	ACatalan Opening
+M92	P: Open Defense
+OFM+t	RClosed
+SEG8+BL	X
+OKa+tBS	RTarrasch Defense
+Obi	ROpen Defense
+Q+t	d
+SBS7gFh	d, Modern Sharp Variation
+SFM	fClassical Line
+Q7gBLgi	d
+KUc	RHungarian Gambit
+I5qFh	ANimzo-Indian Defense
+M+t	U: Three Knights Variation
+OJR0sVk7y	WSt. Petersburg Variation
+OKa2uEG92	WRomanishin Variation
+Qjb	WThree Knights Variation, Korchnoi Variation
+SVk	vEuwe Variation
+M0k	WDilworth Gambit
+Ns	WRubinstein System
+OBS	n, Taimanov Variation
+OEG	WNormal Variation
+Q+0	WReshevsky Variation
+SLbwohT	WSimagin Variation
+Rt	U
+SLb	U: Normal Variation, Ragozin Variation
+Uwo	oSämisch Deferred
+Q9r	m
+SLb	m, Classical Defense
+U+tJR	oSchlechter Defense
+WKa	oGligoric System
+Qwohqxq	WSämisch Variation
+OJR	Xt. Petersburg Variation
+Q+0	u
+SCQ	u, Fischer Variation
+SKawohY	wRomanishin-Psakhis Variation
+SVk	wAmerican Variation
+Q9rCJ+t	u
+WEG	u
+WVk	u, with Ne4
+OKa	WRubinstein System
+Q+0	n, Rubinstein Variation
+M1t	WKmoch Variation
+M2u	WRomanishin Variation
+M6e	WLeningrad Variation
+OPXenKajbJZ	p, Averbakh Gambit
+WLT	rBenoni Defense
+M7p	WSpielmann Variation
+OKajaBS	p, Romanovsky Gambit
+Nr	WMikenas Attack
+Ny	WClassical Variation
+OBS	p, Zurich Variation
+Q+tLT	rMilner-Barry Variation
+OEG0sLb+tKa	rBerlin Variation
+QwohqyqJR	rKeres Defense
+XZ	rVitolins-Adorjan Gambit
+OKa	rBerlin Variation
+QjaEG	7, Pirc Variation
+Shq	8 Steiner Variation
+OLb	rNoa Variation
+QibUb	4
+Qwo	4
+ShqyqBS	4, Botvinnik Variation
+WKa	rRomanishin Gambit
+WVk	rNoa Variation, Main Line
+Mwo	WSämisch Variation
+OhqxqEG	n
+SKa0s	n
+WJR	n, O'Kelly Variation
+KLb6eFM0sEG46	AQueen's Gambit Declined: Neo-Orthodox Variation
+SVk	ZLasker Defense
+Mib	ZExchange Variation
+OUb6e	r, Positional Variation
+SKS	8ation
+U7y	tReshevsky Variation
+I6e	AIndian Defense: Seirawan Attack
+I7p	O
+Hc	O: Budapest Gambit
+Ijc	f Accepted
+KVk	o, Fajarowicz Defense
+M7y	8, Steiner Variation
+Mwo	8, Bonsdorf Variation
+Lm	qMain Line
+M+t	z, Adler Variation
+M0k	2lekhine Variation
+OLT	8e Variation, Tartakower Defense
+Omc	8e Variation, Abonyi Variation
+M6l	1Rubinstein Variation
+GOW	QWest Indian Defense
+I+tFO2u	AKing's Indian Defense: Fianchetto Variation
+OEG92KS8+Lb	ANeo-Grünfeld Defense: Classical Variation, Original Defense
+OKa92DY	AKing's Indian Defense: Fianchetto Variation, Pterodactyl Variation
+OLT92EG8+Ka	tYugoslav System
+Mxh	XSantasiere Variation
+KLb	ANeo-Grünfeld Defense: with Nf3
+I1t	AIndian Defense: Anti-Grünfeld, Alekhine Variation
+KLb	ANeo-Grünfeld Defense: Goglidze Attack
+KMc	AIndian Defense: Anti-Grünfeld, Alekhine Variation, Leko Gambit
+I2u	AKing's Indian Defense: Fianchetto Variation, Immediate Fianchetto
+KFO92EG5qLT+tBL	tDebrecen Defense
+XS	tCarlsbad Variation
+WKa	tYugoslav Variation, Rare Line
+OLb	AGrünfeld Defense: Counterthrust Variation
+QibVb	ANeo-Grünfeld Defense: Exchange Variation
+KLb	Wwith g3
+M92FO+t	d
+I3n	AIndian Defense: Anti-Grünfeld, Basman-Williams Attack
+I5q	AKing's Indian Defense
+KFO+tEG0sLT90	V: Semi-Classical Variation
+WKS	v, Benoni Variation
+OLT2u	XFianchetto Variation, Delayed Fianchetto
+Q6e	XSmyslov Variation
+M0k	XNormal Variation
+OLT	n
+Q+0	XKramer Variation
+Rt	XNormal Variation, Rare Defenses
+SEG6e	XZinnowitz Variation
+Vs	XLarsen Variation
+U90	XOrthodox Variation
+WBQ	XKazakh Variation
+WMc	XOrthodox Variation
+Q1l	XFour Pawns Attack
+SBQ	o, Modern Defense
+Rt	XSämisch Variation
+SEG	o, Normal Defense
+U+0	qBobotsov-Korchnoi-Petrosian Variation
+U6e	Yteiner Attack
+VsBS	Yämisch Variation, Yates Defense
+WJR	qDouble Fianchetto
+WKa	qSämisch Gambit
+WMc	qOrthodox Variation
+Q2u	XNormal Variation, Deferred Fianchetto
+Q3v	XMakogonov Variation
+SEG6s	XKarpov System
+Q6e	XAccelerated Averbakh Variation
+Q90	XNormal Variation, Standard Development
+SEG1l	XFour Pawns Attack
+U6e	XAverbakh Variation
+WBL	p, Geller Defense
+XQ	rModern Defense
+XS	rNc6 Defense
+WIQ	rSpanish Defense
+WKa	rBenoni Defense
+WPX	rFlexible Defense
+Vs	XSemi-Averbakh System
+KLb	AGrünfeld Defense
+M+t	Q: Three Knights Variation
+OFO	p
+Q0s	p, Burille Variation
+SEG6z	SOpocensky Variation
+U7p	SThree Knights Variation, Vienna Variation
+WMU	SBotvinnik Variation
+U9r	SThree Knights Variation, Paris Variation
+Uxh	SMakogonov Variation
+Q6e	SThree Knights Variation, Petrosian System
+Rl	rHungarian Attack
+SEG0s	1Variation
+Q7g	SFlohr Variation
+Rp	SRussian Variation
+M1t	SLutikov Variation
+OKaibVbqg	j, Murrey Attack
+M2m	SGibbon Gambit
+M3n	SZaitsev Gambit
+M6e	SStockholm Variation
+OVkqkbk7zKa	SLundin Variation
+Nl	SBrinckmann Attack
+OFO0sEG	j, Grünfeld Gambit
+U46	0, Capablanca Variation
+M7p	SRussian Variation, Accelerated Variation
+MibVb	SExchange Variation
+Qqg	k, Nadanian Attack
+I7y	AQueen's Pawn, Mengarini Attack
+Ijb	AIndian Defense: Anti-Grünfeld, Advance Variation
+KJZ	horjan Gambit
+He	QMedusa Gambit
+CJR	AEnglish Defense
+EyiCJ5qMc	P: Eastbourne Gambit
+DZ	APolish Defense
+E0kCJ9Z	O: Spassky Gambit Accepted
+CKS+tGVyiJZ	ASlav Indian: Kudischewitsch Gambit
+EyiLT	AQueen's Pawn Game: Anglo-Slav Opening
+Da	ABenoni Defense: Old Benoni
+E+tajxh	QZilbermints-Benoni Gambit
+KMc	p, Tamarkin Countergambit
+Eja	QBenoni Gambit Accepted
+GBQ	d, Schlenker Defense
+GJR	QCormorant Gambit
+Fb	QOld Benoni
+GBQ	QSnail Variation
+GGV	QBenoni-Indian Defense
+I+t	l, Kingside Move Order
+I5qDY	QWoozle
+GLT	QOld Benoni
+I5qOW	a, Schmid Variation
+GMc	a
+I0kLT	QSemi-Benoni
+GNd	QOld Benoni, Mujannah Formation
+I0k	QBenoni-Staunton Gambit
+Exh	QZilbermints-Benoni Gambit
+Eyiaj0s	AQueen's Pawn Game: Liedmann Gambit
+CLT	R
+E+tCm	AWade Defense
+IyiBL7pAB	AZukertort Opening: Wade Defense, Chigorin Plan
+GOW	AQueen's Pawn Game: Rossolimo Variation
+IyiFO0kCm	ARobatsch Defense: Rossolimo Variation
+Eyi	AOld Indian Defense
+GMc	ARat Defense: English Rat
+IjcBS	Y, Lisbon Gambit
+KCU	aPounds Gambit
+Db	AQueen's Pawn Game
+E+t	R: Zukertort Variation
+GBS	TChigorin Variation
+GCdyiMU5qKS	IGambit Declined: Baltic Defense, Pseudo-Slav
+GGV	IPawn Game: Symmetrical Variation
+I0s	TColle System
+KCd	f, Anti-Colle
+KMU	f
+M9r	f
+Mxp	f
+OKa6xBS	f
+U5z	f
+U9r	f
+KOW9rFO	f, Grünfeld Formation
+I2u	TSymmetrical Variation, Pseudo-Catalan
+KKS92Cm	4
+Q8+BLyi	ASlav Defense: Modern Line
+I6e	AQueen's Pawn Game: Torre Attack
+KMU0sBL9r	f
+OKa5z	f
+SBSyq	f
+QyqBL	f
+U5z	f
+WFM	f
+XT	f
+TS	f
+U9r	f
+M5zFMyqBL0s	f
+KOW	f, Grünfeld Variation
+M0s	z
+KVk	iossip Variation
+Jl	TLondon System
+KKa0s	g
+OBS5z	g
+SMUyq	g
+IyiJZ	TZilbermints Countergambit
+KKS5qMU0sVk9rNd	ASemi-Slav Defense: Stonewall Defense
+GKS6ePXenDR	AQueen's Pawn Game: Levitsky Attack, Euwe Variation, Modern Line
+Ha	TKrause Variation
+I0sGV5zMUxp	TZukertort Variation
+I2uaj92	TChandler Gambit
+GMU6l	TLondon System, with e6
+KGV	p
+E0k	ABlackmar-Diemer Gambit
+Gbk1t	W: Blackmar Gambit
+I5qCd	YZeller Defense
+M1tGV9i	m, Soller Attack
+KGV	W
+M1tBS	W Declined: Lamb Defense
+OCd	hVienna Defense
+OIQ	hGedult Defense
+OKS	hO'Kelly Defense
+Pa	hBrombacher Countergambit
+OMU	hWeinsbach Defense
+Qtk	y, Pfrang Gambit
+Pc	hElbert Countergambit
+Oks	hLangeheinicke Defense
+Pt	XAccepted
+Q+tBL	f: Schlutter Defense
+TS	hPietrowsky Defense
+SCd	hGunderam Defense
+Tm	hTeichmann Defense
+SDT	hHolwell Defense
+SJR	hRitter Defense
+SKS	hZiegler Defense
+Ta	hKaulich Defense
+SMU	hEuwe Defense
+U9r	t, Duthilleul Gambit
+SOW	hBogoljubow Defense
+Q7t	hRyder Gambit
+M6e	W: von Popiel Gambit
+Ns	YRasa-Studier Gambit
+KKa	Zeversed Albin Countergambit
+KMc	YLemberger Countergambit
+M+0	v, Rasmussen Attack
+M6s	xSoller Attack
+M7f	yneiders Attack
+Mjc	xEndgame Variation
+Mqk	xLange Gambit
+KNd	YNetherlands Variation
+I6s	YDiemer-Rosenberg Attack
+I9i	YFritz Attack
+Fs	AQueen's Pawn Game
+GGV	R
+I9r	R: Stonewall Attack
+E1l	TMason Attack
+E2m	TZurich Gambit
+E5q	TChigorin Variation
+GCd	l, Alburt Defense
+Hm	onti-Veresov
+GGV6l	ARapport-Jobava System
+KMU	V
+KOW	V
+GKa	AQueen's Pawn Game: Chigorin Variation, Irish Gambit
+GMU	l
+I6l	ARapport-Jobava System, with e6
+Hc	AQueen's Pawn Game: Chigorin Variation, Shaviliuk Gambit
+GPf	propshire Defense
+E6e	TLevitsky Attack
+GCm	i, Welling Variation
+Fl	TAccelerated London System
+GKa	s, Steinitz Countergambit
+I0k	8ergambit, Morris Countergambit
+Kbk	8ergambit, Morris Countergambit Accepted
+Ija	8ergambit Accepted
+E7r	AAmazon Attack
+Eyi	AQueen's Gambit
+GBS	O Declined: Chigorin Defense
+I+tCm	p, Main Line
+M7g	0, Alekhine Variation
+KMc	rLazard Gambit
+I5q	p
+KMc	p, Tartakower Gambit
+Kbi	p
+M+t	p, Janowski Variation
+OGV	rModern Gambit
+IibDb	rExchange Variation
+GCd	ZBaltic Defense
+I5qMU+tBS	n, Pseudo-Chigorin
+M7p	pQueen Attack Deferred
+I7p	1
+Iibd57gKSbSBS	pArgentinian Gambit
+GGV	ZMarshall Defense
+IibKS	p, Tan Gambit
+GJZ	ZZilbermints Gambit
+GKS	ASlav Defense
+I+t	M: Modern Line
+KGV0s	OQuiet Variation
+OCd	d, Schallopp Defense
+Q5qMU	w
+QibSb5q	OExchange Variation, Schallopp Variation
+Pm	OQuiet Variation, Pin Defense
+OMU5z	Bemi-Slav Defense: Quiet Variation
+SBL	i
+U9rSa	AQueen's Gambit Declined: Semmering Variation
+SVk9rNd	atonewall Variation
+M2uCm92MU8+	ASlav Defense: Modern Line
+Obi92OW	Z
+M5q	OThree Knights Variation
+ODR	OSüchting Variation
+OIQ	OChebanenko Variation
+Q0sCd	i
+Qia	i, Advance System
+OMU	Bemi-Slav Defense
+Q6eBL0s	AQueen's Gambit Declined
+WDY	X: Cambridge Springs Defense
+SPXeVDV	ASemi-Slav Defense: Moscow Variation
+Vn	TAnti-Moscow Gambit
+Sbi	R Accepted
+U0k	R: Botvinnik Variation
+OOW	Blav Defense: Schlechter Variation
+Obi	OTwo Knights Attack
+Q0k	OGeller Gambit
+SJZkc	b
+Rs	OAlekhine Variation
+Qwg	Qapin Variation
+SBQ	OSmyslov Variation
+SCd	OCzech Variation
+U0s	d, Classical System
+WBQ	fLasker Variation
+Utc	fKrause Attack
+WMU	fWiesbaden Variation
+Vn	fBled Attack
+Tm	OSteiner Variation
+SMU	Poultanbeieff Variation
+Nz	OBreyer Variation
+M6e	Ponet Gambit
+MibSb	OExchange Variation
+I0k	ODiemer Gambit
+I5q	M
+KGV0sMU+t	Bemi-Slav Defense: Main Line
+SBL	TNormal Variation
+U7y	TStoltz Variation
+U9r	TMain Line
+WFM	TBogoljubow Variation
+XT	TChigorin Defense
+Xh	TRomih Variation
+SIQ	TAccelerated Meran Variation
+KMc	Blav Defense: Winawer Countergambit
+M0k	j, Anti-Winawer Gambit
+Kbi	M
+M0k	M: Slav Gambit, Alekhine Attack
+Iib	OExchange Variation
+KSb5qGV+tBS6lCd	g, Symmetrical Line
+Q1t	iBoor Attack
+Ha	AQueen's Gambit Declined: Austrian Defense
+I+tGV5qMU0sBS9r	ZSemi-Tarrasch Defense, with e3
+IibGV	ZAustrian Defense, Gusev Countergambit
+M0kVkjaDY	rHaberditz Variation
+Ijabj	iAttack, Salvio Countergambit
+GMU	X
+I+tGV0sKS5zOW	X: Spielmann Variation
+M5qBS6eFM0sEG	X
+Obi0k	PAccepted
+Q6e	X
+SFM	PDeclined
+U0k	X
+KKa	X: Tarrasch Defense, Pseudo-Tarrasch
+MibUb6e	6 Bishop Attack
+I5q	ZQueen's Knight Variation
+KFM	ZCharousek Variation
+M+tGV6lEG0sJR	ZHarrwitz Attack, Fianchetto Defense
+M0kbk1t	ZCharousek Variation, Miladinovic Gambit
+KGV	ZNormal Defense
+M+tFM0sEG	ZThree Knights Variation
+Q6lEG0sKS	ZHarrwitz Attack, Orthodox Defense
+OKa6e	ZSemi-Tarrasch Defense, Pillsbury Variation
+M6e	ZModern Variation
+OBL	p, Knight Defense
+Q+tKS0k	ZAlekhine Variation
+Q0s	ZModern Variation, Knight Defense
+SFh	aanhattan Variation
+SKS	aodern Variation, Knight Defense
+Uwo	ZCapablanca Variation, Anti-Cambridge Springs Variation
+OFM	X
+Q+t	X
+QeV	X: Modern Variation, Heral Variation
+OKa	ZBeen-Koomen Variation
+Q+taj7j	ZPseudo-Tarrasch Variation, Primitive Pillsbury Variation
+Qib	y
+SDR	y, Canal Variation
+Nl	ZHarrwitz Attack
+KIQ	ZJanowski Variation
+KKS	ASemi-Slav Defense: Accelerated Move Order
+M+tGV0sBLtc	TRubinstein System
+Obi	TNoteboom Variation
+Q2u	l, Anti-Noteboom Gambit
+Q6e	1Variation
+SNV	8on, Belyavsky Line
+M0k	TMarshall Gambit
+Obk1t	TGunderam Gambit
+QqkFh6z	TMarshall Gambit, Main Line
+Ukq	kForgotten Variation
+NsNd	TAnti-Noteboom, Stonewall Variation
+Q2m	1, Portisch Gambit
+La	ATarrasch Defense
+M0sGV+tBS	Q: Symmetrical Variation
+MibUb	AQueen's Gambit Declined: Tarrasch Defense
+Q+t	ATarrasch Defense: Two Knights Variation
+SBS2u	SRubinstein System
+WGV	SPrague Variation
+Wai	SSwedish Variation
+U6eFM	AQueen's Gambit Declined: Tarrasch Defense
+Q0k	ATarrasch Defense: Marshall Gambit
+QjabjqgJZ	STarrasch Gambit
+Oaj	SSchara Gambit
+Hc	AQueen's Gambit Declined: Albin Countergambit
+Ijcbj+t	s, Normal Line
+OBS2u	uFianchetto Variation
+SCU	8iation, Be6 Line
+Td	8iation, Bf5 Line
+Tm	8iation, Bg4 Line
+Q5z	uModern Line
+SDM	uBalogh Variation
+SNV	uJanowski Variation
+OKa	uTartakower Defense
+M0k	uSpassky Variation
+NsFh6zjs	uLasker Trap
+Gbi	PAccepted
+I+t	X: Normal Variation
+KBL	ZGodes Variation
+KGV	X
+M0s	X: Normal Variation
+OCU	ZWinawer Defense
+Pm	ZJanowski-Larsen Variation
+OMU	ZNormal Variation, Traditional System
+Q9iFM8+EG	8m
+WIQ	8m
+SKa	ZClassical Defense
+U8+	q, Normal Line
+WBS	sSteinitz Variation, Development Variation
+WIQ	sMain Line
+Waj	sSteinitz Variation, Exchange Variation
+OOW	ZSmyslov Variation
+M5q	ahowalter Variation
+OIQ0k	ZBogoljubow Defense
+M7g	ZMannheim Variation
+KIQ	ZAlekhine Defense
+M0k	p, Borisenko-Furman Variation
+NsCm9iMUjb	rAlatortsev Variation
+OJZ	rHaberditz Variation
+KJZ	ZSlav Gambit
+KKa	ZGunsberg Defense
+KMU	ZRosenthal Variation
+I0k	ZSaduleto Variation
+KBS	ZCentral Variation, Modern Defense
+KGV	sAlekhine System
+KJZ	sGreco Variation
+KKa	sRubinstein Defense
+MjbGV5qJZ	ZLinares Variation
+OJZ	ZCentral Variation, Rubinstein Defense, Yefimov Gambit
+KMc	sMcDonnell Defense
+M9i	8e, Somov Gambit
+KNd	ZSchwartz Defense
+Js	ZOld Variation
+KMc9icj7pDM+t	m, Christensen Gambit
+U5z	oNovikov Gambit
+U89	oKorchnoi Gambit
+Uwo	oBillinger Gambit
+I7g	ZAccelerated Mannheim Variation
+CMU	AHorwitz Defense
+E0kLT	ARat Defense: Small Center Defense
+EyiFh	AKangaroo Defense
+I5q	Q: Keres Defense, Transpositional Variation
+GJR	AEnglish Defense
+I0kCJ1tNdkdGX	P: Poli Gambit
+M9rBS	Serrin Variation
+I5qLb	AQueen's Gambit Declined: Alapin Variation
+GUc	AHorwitz Defense: Zilbermints Gambit
+Dc	AEnglund Gambit
+E+t	O Declined: Reversed Alekhine
+Gck	iKrebs
+It+	iBrooklyn
+Jc	iMokele Mbembe
+E0s	iFrench
+Ejb	X
+GFa0kDn	X: Diemer Counterattack
+FcBS+tDM	O: Main Line
+M7b	QStockholm Variation
+KFa	QFelbecker Gambit
+KGM	QZilbermints Gambit
+KNV	QSoller Gambit Deferred
+GDn	QMosquito Gambit
+GLT	QHartlaub-Charlick Gambit
+GNV	QSoller Gambit
+CNd	ADutch Defense
+E+tGVyq	N: Barcza Variation
+GMc	POmega-Isis Gambit
+E0k	PStaunton Gambit
+Gdk	e Accepted
+I5qGV1t	PBlackmar's Second Gambit
+M2m	PStaunton Gambit, Tartakower Variation
+M6e	e
+OJR	e, Nimzowitsch Variation
+OKS	gChigorin Variation
+OOW1t	gLasker Variation
+Q3n	gAlekhine Variation
+Jz	hmerican Attack
+E2m	PKrejcik Gambit
+GMc	PHevendehl Gambit
+Gdm0kLb5q	PKrejcik Gambit, Tate Gambit
+Fu	PFianchetto Attack
+GGV92MU+v	PBlackburne Variation
+KOW	PSemi-Leningrad Variation
+GKS92OW+tFO8+GX	PLeningrad, Basman System
+GOW92FO+v	Y Variation, Carlsbad Variation
+E3v	PKorchnoi Attack
+GGV2m	PJanzen-Korchnoi Gambit
+E5q	PRaphael Variation
+GGV2m	PSpielmann Gambit
+GLb	AQueen's Pawn Game: Veresov Attack, Dutch System
+I0k	ADutch Defense: Kingfisher Gambit
+E6e	PHopton Attack
+FlMU2m	PSenechaud Gambit
+E7r	PAlapin Variation
+GLT2m	PManhattan Gambit, Anti-Modern
+Hb2m	mStonewall
+GMU2m	mClassical Line
+GOW2m	mLeningrad
+Eyi	N
+GGV	N: Normal Variation
+I2u	PFianchetto Variation
+KLT92KS5qDK	PHort-Antoshin System
+KMU92	PClassical Variation
+OFM	i
+Q+tEG	i
+U8+LT	i
+Xb	PStonewall Variation
+WVk	PAlekhine Variation
+Rv	PClassical Variation, Blackburne Attack
+Ph	PNimzo-Dutch Variation
+Q6zhM	k, Alekhine Variation
+OLb+t	PClassical Variation
+KOW	PLeningrad Variation
+M92FO+t	i
+I5q	PQueen's Knight Variation
+KLT+tBS	PKrause Variation
+GMU	PClassical Variation
+I+tGV2uKS92Lb8+FT	PStonewall Variation, Modern Variation
+I0k	PBellon Gambit
+I5q	PRubinstein Variation
+GOW5qGX	PBladel Variation
+COW	AQueen's Pawn Game: Modern Defense
+E+tFO0sKa9rDY	AColle System: Pterodactyl Variation
+OajtjDY	OSiroccopteryx Variation
+I2uKa92DY	APterodactyl Defense: Fianchetto, Queen Pterodactyl
+I5qLb	AQueen's Pawn Game: Chigorin Variation, Fianchetto Defense
+I6lKayqajqjDY	TLondon System, Pterodactyl Variation
+E0kFO5qKajb	APterodactyl Defense: Eastern, Benoni
+E3nGVnf	AModern Defense: Lizard Defense, Pirc-Diemer Gambit
+E5qFO0kKajbDY	APterodactyl Defense: Eastern, Benoni Pterodactyl
+EyiFO0kKajbDY	VCentral, Benoni Pterodactyl
+KLT5qKa+0DY	fogolubovia
+M6sGV1t	AModern Defense: Averbakh Variation, Pseudo-Sämisch
+KMc	QNeo-Modern Defense
+I5qKa0s	APterodactyl Defense: Queen Pterodactyl, Quiet Line
+MjbDY	VFianchetto, Queen Benoni Pterodactyl
+OLT0kOqxqDY	VCentral, Benoni Beefeater Pterodactyl
+OOqxqDY	VFianchetto, Queen Pteranodon
+SNd	AModern Defense: Beefeater Variation
+KLT	O
+M0k	O: Averbakh System
+OBS	QKotov Variation
+ONd	QRandspringer Variation
+De	ABorg Defense: Borg Gambit
+Br	AMieses Opening
+CKa5qBS2u	O: Venezolana Variation
+CMc	QReversed Rat
+E5z	AValencia Opening
+COW2m	AMieses Opening: Myers Spike Attack</script>
 <script>
 "use strict";
 /* ---------- Schach-Engine (vollständige Regeln, keine externen Libs) ---------- */
@@ -604,10 +3467,14 @@ function currentLegal(){ if(!legalCache) legalCache=legalMoves(state,state.turn)
 
 function render(){
   boardEl.innerHTML='';
-  const last=history.length?history[history.length-1].mv:null;
-  const checkNow=inCheck(state.board,state.turn,state);
-  const kingPos=checkNow?findKing(state.board,state.turn):null;
-  const sel=selected;
+  // Im Durchgeh-Modus zeigt das Brett die Stellung des gewählten Zuges
+  const rev=(reviewIdx!==null&&recapData);
+  const view=rev?recapData.states[reviewIdx]:state;
+  const last=rev ? (reviewIdx>0?history[reviewIdx-1].mv:null)
+                 : (history.length?history[history.length-1].mv:null);
+  const checkNow=inCheck(view.board,view.turn,view);
+  const kingPos=checkNow?findKing(view.board,view.turn):null;
+  const sel=rev?null:selected;
   const targets = sel ? currentLegal().filter(m=>m.from.r===sel.r&&m.from.c===sel.c) : [];
 
   for(let vr=0;vr<8;vr++)for(let vc=0;vc<8;vc++){
@@ -615,7 +3482,7 @@ function render(){
     const sq=document.createElement('div');
     sq.className='sq '+((r+c)%2===0?'light':'dark');
     sq.dataset.r=r; sq.dataset.c=c;
-    const p=state.board[r][c];
+    const p=view.board[r][c];
     if(p) sq.appendChild(pieceEl(p[1],p[0]));
     if(sel&&sel.r===r&&sel.c===c) sq.classList.add('sel');
     if(last&&((last.from.r===r&&last.from.c===c)||(last.to.r===r&&last.to.c===c)))
@@ -623,7 +3490,7 @@ function render(){
     if(kingPos&&kingPos[0]===r&&kingPos[1]===c) sq.classList.add('check');
     const tgt=targets.find(m=>m.to.r===r&&m.to.c===c);
     if(tgt){ const d=document.createElement('div'); d.className='dot'; sq.appendChild(d);
-             if(state.board[r][c]||tgt.to.flag==='ep') sq.classList.add('capture'); }
+             if(view.board[r][c]||tgt.to.flag==='ep') sq.classList.add('capture'); }
     // Koordinaten am Rand
     if(vc===0){ const cr=document.createElement('div'); cr.className='coord rank';
                 cr.textContent=8-r; sq.appendChild(cr); }
@@ -681,6 +3548,7 @@ function renderMoves(){
 }
 
 function onSquare(r,c){
+  if(reviewIdx!==null) return;            // Durchgeh-Modus: nur ansehen
   if(currentLegal().length===0) return;   // Partie beendet
   if(mySide && mySide!==state.turn) return;   // fremde Farbe / Zuschauer
   if(Sync.transport && phase!=='run') return; // Partie noch nicht gestartet / beendet
@@ -929,6 +3797,7 @@ function capturedBy(col){
 function renderPlayers(){
   const el=document.getElementById('players');
   if(!el) return;
+  if(reviewIdx!==null){ el.style.display='none'; return; }
   const plc=!!Sync.transport;
   const capW=capturedBy('w'), capB=capturedBy('b');
   el.innerHTML='';
@@ -1020,11 +3889,17 @@ function engineOff(){
 function onEngine(line){
   if(line==='uciok'){ sfReady=true; if(batch) batch.go(); else analyse(true); return; }
   if(batch){                                   // Stapel-Analyse fürs Recap
-    if(line.indexOf('info ')===0){
+    if(line.indexOf('info ')===0 && line.indexOf(' pv ')>=0){
       const m=/score mate (-?\d+)/.exec(line), c=/score cp (-?\d+)/.exec(line);
-      if(m||c) batch.cp=batch.sign*scoreCp(m?{mate:+m[1]}:{cp:+c[1]});
+      if(m||c){
+        const mp=/multipv (\d+)/.exec(line), n=mp?+mp[1]:1;
+        const v=batch.sign*scoreCp(m?{mate:+m[1]}:{cp:+c[1]});
+        const first=line.slice(line.indexOf(' pv ')+4).trim().split(/\s+/)[0];
+        if(n===1){ batch.cp=v; batch.best=first; } else if(n===2){ batch.second=v; }
+      }
     } else if(line.indexOf('bestmove')===0){
-      const r=batch.res; const v=batch.cp; batch=null; r(v);
+      const r=batch.res, v={cp:batch.cp, best:batch.best, second:batch.second};
+      batch=null; r(v);
     }
     return;
   }
@@ -1124,18 +3999,98 @@ function updateEval(){                             // nur Zuschauer sehen die An
   if(want){ engineOn(); analyse(false); } else if(sf) engineOff();
 }
 
+/* ---------- Eröffnungsbuch ----------
+   Zugfolgen sind als Quadrat-Indizes (2 Zeichen je Halbzug) kodiert und
+   gegenüber dem Vorgänger präfixkomprimiert; dasselbe für die Namen. */
+const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const bookNames=new Map(), bookPrefix=new Set();
+(function loadBook(){
+  const el=document.getElementById('bookData');
+  if(!el) return;
+  let pm='',pn='';
+  for(const line of el.textContent.split('\n')){
+    const t=line.indexOf('\t'); if(t<0) continue;
+    const mp=line.slice(0,t), np=line.slice(t+1);
+    const m=pm.slice(0,B64.indexOf(mp[0]))+mp.slice(1);
+    const n=pn.slice(0,B64.indexOf(np[0]))+np.slice(1);
+    bookNames.set(m,n); pm=m; pn=n;
+    for(let i=2;i<=m.length;i+=2) bookPrefix.add(m.slice(0,i));
+  }
+})();
+function encSq(s){ return B64[(s.charCodeAt(0)-97)+8*(8-(+s[1]))]; }
+function encMoves(list){                       // UCI-Liste -> Buch-Kodierung
+  let o=''; for(const c of list) o+=encSq(c.slice(0,2))+encSq(c.slice(2,4));
+  return o;
+}
+function bookOpening(moves){                   // längster Treffer als Name
+  let best='',code='';
+  for(let k=1;k<=moves.length;k++){
+    const e=encMoves(moves.slice(0,k));
+    if(bookNames.has(e)){ best=bookNames.get(e); code=e; }
+    if(!bookPrefix.has(e)) break;
+  }
+  return {name:best,plies:code.length/2};
+}
+
 /* ---------- Game Recap: Partie nach dem Ende komplett auswerten ---------- */
-const RECAP_DEPTH=14;
+const RECAP_DEPTH=14, DEEP_DEPTH=17, DEEP_MAX=8;
 let batch=null, recapRun=false, recapData=null;
 
-// Bewertung einer Stellung nach k Halbzügen (aus Sicht von Weiß)
-function evalPosition(movesStr,k){
+// Bewertung einer Stellung nach k Halbzügen (aus Sicht von Weiß),
+// dazu bester und zweitbester Zug für die Einstufung
+function evalPosition(movesStr,k,depth){
   return new Promise(res=>{
-    const send=()=>{ sf.postMessage('position startpos'+(movesStr?' moves '+movesStr:''));
-                     sf.postMessage('go depth '+RECAP_DEPTH); };
-    batch={cp:0, sign:(k%2===0)?1:-1, res, go:send};
+    const send=()=>{ sf.postMessage('setoption name MultiPV value 2');
+                     sf.postMessage('position startpos'+(movesStr?' moves '+movesStr:''));
+                     sf.postMessage('go depth '+(depth||RECAP_DEPTH)); };
+    batch={cp:0, best:null, second:null, sign:(k%2===0)?1:-1, res, go:send};
     if(sfReady) send();
   });
+}
+/* Materialtausch auf einem Feld: Was gewinnt der Gegner dort? (2 Halbzüge) */
+function exchangeGain(st,r,c){
+  const target=st.board[r][c]; if(!target) return 0;
+  let best=0;
+  for(const mv of legalMoves(st,st.turn)){
+    if(mv.to.r!==r||mv.to.c!==c) continue;
+    const {ns}=applyMove(st,mv.from,mv.to);
+    let back=0;
+    for(const mv2 of legalMoves(ns,ns.turn)){
+      if(mv2.to.r===r&&mv2.to.c===c){
+        const v=ns.board[r][c]; back=Math.max(back,VALUE[v[1]]||0);
+      }
+    }
+    best=Math.max(best,(VALUE[target[1]]||0)-back);
+  }
+  return best;
+}
+// Stellungen der ganzen Partie nachspielen (für Brett und Opfererkennung)
+function replayStates(codes){
+  const out=[]; let st={board:initBoard(),turn:'w',
+    castle:{wK:true,wQ:true,bK:true,bQ:true},ep:null,halfmove:0,fullmove:1};
+  out.push(st);
+  for(const code of codes){
+    const from=parseSq(code.slice(0,2)), to=parseSq(code.slice(2,4));
+    const promo=code.length>4?code[4].toUpperCase():null;
+    const mv=legalMoves(st,st.turn).find(m=>m.from.r===from.r&&m.from.c===from.c
+                                           &&m.to.r===to.r&&m.to.c===to.c);
+    if(!mv) break;
+    const t={...mv.to}; if(promo) t.promo=promo;
+    st=applyMove(st,mv.from,t).ns; out.push(st);
+  }
+  return out;
+}
+function nonPawnMaterial(st){
+  let s=0;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=st.board[r][c];
+    if(p&&p[1]!=='P'&&p[1]!=='K') s+=VALUE[p[1]]||0;
+  }
+  return s;
+}
+// Grobe Spielstärke-Schätzung aus der Genauigkeit – bewusst nur ein Richtwert
+function ratingEstimate(acc){
+  return Math.max(400,Math.min(2800,Math.round((acc-35)*46)));
 }
 // Gewinnerwartung und Genauigkeit nach der bei lichess gebräuchlichen Formel
 function winPct(cp){ return 50+50*(2/(1+Math.exp(-0.00368208*cp))-1); }
@@ -1149,26 +4104,92 @@ async function runRecap(){
   showRecap({busy:true,done:0,total:moves.length+1});
   engineOn();
   if(!sf){ recapRun=false; showRecap({error:true}); return; }
-  const cps=[];
+  const states=replayStates(moves);
+  const cps=[],bests=[],seconds=[];
   for(let k=0;k<=moves.length;k++){
-    cps.push(await evalPosition(moves.slice(0,k).join(' '),k));
+    const st=states[k];
+    // Matt oder Patt: die Engine liefert keine Variante mehr, der Wert steht fest
+    if(st&&legalMoves(st,st.turn).length===0){
+      const mated=inCheck(st.board,st.turn,st);
+      cps.push(mated?(st.turn==='w'?-10000:10000):0);
+      bests.push(null); seconds.push(null);
+    }else{
+      const r=await evalPosition(moves.slice(0,k).join(' '),k);
+      cps.push(r.cp); bests.push(r.best); seconds.push(r.second);
+    }
     showRecap({busy:true,done:k+1,total:moves.length+1});
   }
-  // Verluste je Zug bestimmen und zu Genauigkeit und Kategorien verdichten
-  const st={w:{acc:[],n:0,best:0,good:0,inac:0,mist:0,blun:0},
-            b:{acc:[],n:0,best:0,good:0,inac:0,mist:0,blun:0}};
-  const marks=[];
+  /* Zweite Runde: Bei scharfen Stellungen kann die Bewertung zwischen zwei
+     Suchen springen – die Engine sieht ein Opfer erst eine Stellung später.
+     Genau dort rechnen wir tiefer nach, statt die ganze Partie zu verlangsamen. */
+  const swings=[];
+  for(let i=0;i<moves.length;i++){
+    const j=Math.abs(cps[i]-cps[i+1]);
+    if(j>=250) swings.push({i,j});
+  }
+  swings.sort((a,b)=>b.j-a.j);
+  const deep=new Set();
+  for(const s of swings.slice(0,DEEP_MAX)){ deep.add(s.i); deep.add(s.i+1); }
+  const list=[...deep].sort((a,b)=>a-b);
+  let done=0;
+  for(const k of list){
+    const st=states[k];
+    if(!st||legalMoves(st,st.turn).length===0) continue;
+    const r=await evalPosition(moves.slice(0,k).join(' '),k,DEEP_DEPTH);
+    cps[k]=r.cp; bests[k]=r.best; seconds[k]=r.second;
+    showRecap({busy:true,deep:true,done:++done,total:list.length});
+  }
+  const opening=bookOpening(moves);
+  const blank=()=>({acc:[],n:0,brill:0,great:0,best:0,good:0,book:0,
+                    inac:0,miss:0,mist:0,blun:0,
+                    ph:{o:[],m:[],e:[]}});
+  const st={w:blank(),b:blank()};
+  const marks=[],drops=[];
   for(let i=0;i<moves.length;i++){
     const mover=(i%2===0)?'w':'b', s=st[mover];
-    const before=winPct(cps[i]), after=winPct(cps[i+1]);
-    const drop=Math.max(0,(mover==='w')?(before-after):(after-before));
+    // Alles aus Sicht des Ziehenden rechnen
+    const pct=v=>(mover==='w')?winPct(v):100-winPct(v);
+    const before=pct(cps[i]), after=pct(cps[i+1]);
+    const isBook=bookPrefix.has(encMoves(moves.slice(0,i+1)));
+    const isBest=bests[i]&&moves[i].slice(0,4)===bests[i].slice(0,4);
+    // Wer den von der Engine besten Zug spielt, verliert nichts. Ohne diese
+    // Regel bestraft die stellungsweise Analyse ihre eigene Empfehlung, weil
+    // die Bewertung zwischen zwei Suchen schwanken kann.
+    const drop=isBest?0:Math.max(0,before-after);
+    drops.push(drop);
     s.acc.push(moveAccuracy(drop)); s.n++;
-    const q=classify(drop); marks.push(q);
-    if(drop<2) s.best++; else if(drop<10) s.good++;
-    else if(drop<20) s.inac++; else if(drop<30) s.mist++; else s.blun++;
+    const gap=(seconds[i]!=null)?(before-pct(seconds[i])):0;   // wie einzigartig
+    // Opfer: gibt der Zug Material her, das der Gegner nehmen kann?
+    const to=parseSq(moves[i].slice(2,4));
+    const taken=states[i].board[to.r][to.c];
+    const net=(taken?(VALUE[taken[1]]||0):0)-exchangeGain(states[i+1],to.r,to.c);
+
+    let q;
+    if(isBook&&drop<10){ q={t:'Buchzug',s:'',c:'q-book'}; s.book++; }
+    else if(isBest&&drop<2&&net<=-2&&before<97&&after>=45){
+      q={t:'Glanzzug',s:'!!',c:'q-brill'}; s.brill++; }
+    else if(isBest&&drop<2&&gap>=15&&before<95){
+      q={t:'Starker Zug',s:'!',c:'q-great'}; s.great++; }
+    else if(drop>=10&&before>=92&&after<60){
+      q={t:'Verpasst',s:'?',c:'q-miss'}; s.miss++; }
+    else{
+      q=classify(drop);
+      if(drop<2) s.best++; else if(drop<10) s.good++;
+      else if(drop<20) s.inac++; else if(drop<30) s.mist++; else s.blun++;
+    }
+    marks.push(q);
+    // Partiephase für die Teilgenauigkeit
+    const phase=(i<opening.plies)?'o':(nonPawnMaterial(states[i])<=13?'e':'m');
+    s.ph[phase].push(moveAccuracy(drop));
   }
   const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
-  recapData={cps,st,marks,accW:avg(st.w.acc),accB:avg(st.b.acc)};
+  // Schlüsselmomente: die drei größten Einbrüche
+  const key=drops.map((d,i)=>({i,d})).filter(x=>x.d>=10)
+    .sort((a,b)=>b.d-a.d).slice(0,3).sort((a,b)=>a.i-b.i);
+  recapData={cps,bests,states,marks,drops,st,opening,key,
+    accW:avg(st.w.acc),accB:avg(st.b.acc),
+    phW:{o:avg(st.w.ph.o),m:avg(st.w.ph.m),e:avg(st.w.ph.e)},
+    phB:{o:avg(st.b.ph.o),m:avg(st.b.ph.m),e:avg(st.b.ph.e)}};
   quality=marks;                       // Symbole in der Zugliste nachtragen
   renderMoves();
   recapRun=false;
@@ -1197,28 +4218,109 @@ function showRecap(o){
   const chart=document.getElementById('recapChart');
   const tab=document.getElementById('recapTable');
   if(o.error){ sub.textContent='Analyse nicht verfügbar.'; chart.innerHTML=''; tab.innerHTML=''; return; }
-  if(o.busy){ sub.textContent='Analysiere Partie … '+o.done+'/'+o.total;
+  if(o.busy){ sub.textContent=(o.deep?'Prüfe kritische Stellungen … ':'Analysiere Partie … ')+o.done+'/'+o.total;
               chart.innerHTML=''; tab.innerHTML=''; return; }
   if(!recapData){ sub.textContent=''; return; }
   const d=recapData;
-  sub.textContent=history.length+' Halbzüge · Genauigkeit und Zugqualität';
+  sub.textContent=(d.opening.name||'Partie')+' · '+history.length+' Halbzüge';
   chart.innerHTML=evalChart(d.cps);
+  chart.onclick=(ev)=>{ const b=chart.getBoundingClientRect();
+    const k=Math.round((ev.clientX-b.left)/b.width*(d.cps.length-1));
+    startReview(); reviewGo(k); };
   const nm=c=>names[c]||(c==='w'?'Weiß':'Schwarz');
-  const row=(lab,kw,kb,cls)=>'<div class="rrow"><span class="lab '+(cls||'')+'">'+lab+
-    '</span><span class="num">'+kw+'</span><span class="num">'+kb+'</span></div>';
+  const row=(lab,kw,kb,cls)=>(kw||kb)?'<div class="rrow"><span class="lab '+(cls||'')+
+    '">'+lab+'</span><span class="num">'+kw+'</span><span class="num">'+kb+
+    '</span></div>':'';
+  const ph=(lab,a,b)=>'<div class="rrow"><span class="lab">'+lab+
+    '</span><span class="num">'+(a?a.toFixed(0):'–')+'</span><span class="num">'+
+    (b?b.toFixed(0):'–')+'</span></div>';
+  const w=d.st.w, b=d.st.b;
   tab.innerHTML=
     '<div class="rrow head"><span></span><span class="num">'+nm('w')+
       '</span><span class="num">'+nm('b')+'</span></div>'+
     '<div class="rrow acc"><span class="lab">Genauigkeit</span>'+
       '<span class="num">'+d.accW.toFixed(1)+'</span>'+
       '<span class="num">'+d.accB.toFixed(1)+'</span></div>'+
-    row('Bester Zug',d.st.w.best,d.st.b.best,'q-best')+
-    row('Gut',d.st.w.good,d.st.b.good,'q-good')+
-    row('Ungenau',d.st.w.inac,d.st.b.inac,'q-inac')+
-    row('Fehler',d.st.w.mist,d.st.b.mist,'q-mist')+
-    row('Grober Fehler',d.st.w.blun,d.st.b.blun,'q-blun');
+    (history.length>=20?('<div class="rrow est"><span class="lab">geschätzte Wertung</span>'+
+      '<span class="num">'+ratingEstimate(d.accW)+'</span>'+
+      '<span class="num">'+ratingEstimate(d.accB)+'</span></div>'):'')+
+    row('Glanzzug !!',w.brill,b.brill,'q-brill')+
+    row('Starker Zug !',w.great,b.great,'q-great')+
+    row('Bester Zug',w.best,b.best,'q-best')+
+    row('Gut',w.good,b.good,'q-good')+
+    row('Buchzug',w.book,b.book,'q-book')+
+    row('Ungenau ?!',w.inac,b.inac,'q-inac')+
+    row('Verpasst',w.miss,b.miss,'q-miss')+
+    row('Fehler ?',w.mist,b.mist,'q-mist')+
+    row('Grober Fehler ??',w.blun,b.blun,'q-blun')+
+    '<div class="rrow head" style="margin-top:8px"><span>Phasen</span>'+
+      '<span class="num">'+nm('w')+'</span><span class="num">'+nm('b')+'</span></div>'+
+    ph('Eröffnung',d.phW.o,d.phB.o)+ph('Mittelspiel',d.phW.m,d.phB.m)+
+    ph('Endspiel',d.phW.e,d.phB.e)+
+    (d.key.length?('<div class="rrow head" style="margin-top:8px"><span>Schlüsselmomente</span></div>'+
+      d.key.map(k=>{
+        const n=Math.floor(k.i/2)+1, dots=(k.i%2)?'…':'.';
+        const q=d.marks[k.i];
+        return '<div class="rrow key"><span class="lab '+q.c+'">'+n+dots+' '+
+          (history[k.i]?history[k.i].san:'')+' – '+q.t+'</span>'+
+          '<span class="num" style="grid-column:span 2">−'+k.d.toFixed(0)+'%</span></div>';
+      }).join('')):'');
 }
 function hideRecap(){ const b=document.getElementById('recap'); if(b) b.classList.remove('on'); }
+
+/* ---------- Partie durchgehen ---------- */
+let reviewIdx=null;
+function startReview(){
+  if(!recapData) return;
+  hideRecap(); hideLobby(); reviewIdx=history.length; renderReview(); render();
+}
+function endReview(){ reviewIdx=null; renderReview(); render(); syncLobby(); }
+function reviewGo(n){
+  if(reviewIdx===null||!recapData) return;
+  reviewIdx=Math.max(0,Math.min(history.length,n));
+  renderReview(); render();
+}
+function renderReview(){
+  const box=document.getElementById('review');
+  if(!box) return;
+  const on=(reviewIdx!==null&&recapData);
+  box.style.display=on?'block':'none';
+  document.getElementById('players').style.display=on?'none':'';
+  if(!on) return;
+  const d=recapData, i=reviewIdx-1;          // gerade gespielter Zug
+  const cp=d.cps[reviewIdx];
+  document.getElementById('rvCount').textContent=
+    reviewIdx+' / '+history.length;
+  const scoreEl=document.getElementById('rvScore');
+  scoreEl.textContent=(Math.abs(cp)>=9000?(cp>0?'+M':'-M'):((cp>0?'+':'')+(cp/100).toFixed(2)));
+  document.getElementById('rvFill').style.width=
+    Math.round(100/(1+Math.pow(10,-cp/400)))+'%';
+  const mvEl=document.getElementById('rvMove'), bestEl=document.getElementById('rvBest');
+  if(i>=0){
+    const q=d.marks[i], n=Math.floor(i/2)+1, dots=(i%2)?'…':'.';
+    mvEl.className='rvmove '+q.c;
+    mvEl.textContent=n+dots+' '+history[i].san+' – '+q.t;
+    const best=d.bests[i];                    // bester Zug in der Stellung davor
+    const same=best&&best.slice(0,4)===encPlayed(i);
+    bestEl.textContent=(same||!best)?'':'besser: '+uciToSan(i,best);
+  }else{ mvEl.className='rvmove'; mvEl.textContent='Ausgangsstellung'; bestEl.textContent=''; }
+}
+// Der tatsächlich gespielte Zug als UCI (für den Vergleich mit dem besten)
+function encPlayed(i){
+  const h=history[i];
+  return sqName(h.mv.from.r,h.mv.from.c)+sqName(h.mv.to.r,h.mv.to.c);
+}
+// Engine-Zug in lesbare Notation, bezogen auf die Stellung vor Zug i
+function uciToSan(i,uci){
+  const st=recapData.states[i]; if(!st) return uci;
+  const from=parseSq(uci.slice(0,2)), to=parseSq(uci.slice(2,4));
+  const promo=uci.length>4?uci[4].toUpperCase():null;
+  const mv=legalMoves(st,st.turn).find(m=>m.from.r===from.r&&m.from.c===from.c
+                                         &&m.to.r===to.r&&m.to.c===to.c);
+  if(!mv) return uci;
+  const t={...mv.to}; if(promo) t.promo=promo;
+  return moveSAN(st,{from:mv.from,to:t},promo);
+}
 
 /* ---------- Lobby: Platz wählen oder zuschauen ---------- */
 // Kennung dieses Browsers; übersteht Reload, damit der Platz erhalten bleibt.
@@ -1242,7 +4344,8 @@ function syncLobby(){
   if(!Sync.transport) return;
   // Nach dem Spielende hat die Auswertung Vorrang; die Lobby kommt erst,
   // wenn eine neue Partie vorbereitet wird.
-  const open=(mySide===null)||((mySide==='w'||mySide==='b')&&phase==='setup');
+  const open=reviewIdx===null &&
+    ((mySide===null)||((mySide==='w'||mySide==='b')&&phase==='setup'));
   if(open) showLobby(); else hideLobby();
 }
 
@@ -1399,6 +4502,17 @@ try{ const n=sessionStorage.getItem('chessName');
 for(const btn of document.querySelectorAll('.tc'))
   btn.addEventListener('click',()=>setTC(btn.dataset.tc));
 document.getElementById('recapClose').addEventListener('click',hideRecap);
+document.getElementById('recapReview').addEventListener('click',startReview);
+document.getElementById('rvFirst').addEventListener('click',()=>reviewGo(0));
+document.getElementById('rvPrev').addEventListener('click',()=>reviewGo(reviewIdx-1));
+document.getElementById('rvNext').addEventListener('click',()=>reviewGo(reviewIdx+1));
+document.getElementById('rvLast').addEventListener('click',()=>reviewGo(history.length));
+document.getElementById('rvExit').addEventListener('click',endReview);
+document.addEventListener('keydown',e=>{
+  if(reviewIdx===null) return;
+  if(e.key==='ArrowLeft'){ reviewGo(reviewIdx-1); e.preventDefault(); }
+  if(e.key==='ArrowRight'){ reviewGo(reviewIdx+1); e.preventDefault(); }
+});
 document.getElementById('recapBtn').addEventListener('click',()=>{
   if(recapData) showRecap({}); else runRecap();
 });

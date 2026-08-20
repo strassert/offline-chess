@@ -11,6 +11,10 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 | `response.asp` | Rückgabeseite für den Goform-Zugriff (**nur für PLC-Sync nötig**) |
 | `stockfish-18-lite-single.js` | Stockfish-Engine (Loader, 21 KB) – **nur für die Zuschauer-Analyse** |
 | `stockfish-18-lite-single.wasm` | Stockfish-Engine (7,3 MB) – dito |
+
+Die Eröffnungsdatenbank (2833 Eröffnungen, Quelle
+[lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
+CC0) steckt komprimiert in `chess.html` – keine zusätzliche Datei nötig.
 | `PV_Access.js` | B&R-Original-Bibliothek für PV-Zugriff (Referenz; `chess.html` bringt die Logik selbst mit) |
 | `pvtest.html` | Diagnoseseite, die verschiedene Goform-Request-Formate durchprobiert |
 
@@ -95,15 +99,39 @@ das Spiel funktioniert unverändert weiter.
 #### Auswertung nach der Partie
 
 Sobald eine Partie endet, analysiert **jeder** Client die komplette Partie
-neu und zeigt eine Auswertung: Ergebnis, Bewertungsverlauf als Diagramm,
-Genauigkeit beider Spieler und die Aufschlüsselung der Züge nach Qualität.
-Auch Spieler bekommen sie – die Engine startet erst nach Spielende, hilft
-also während der Partie niemandem. Über *Auswertung* im Seitenpanel lässt
-sie sich erneut öffnen.
+neu und zeigt eine Auswertung. Auch Spieler bekommen sie – die Engine
+startet erst nach Spielende, hilft also während der Partie niemandem. Über
+*Auswertung* im Seitenpanel lässt sie sich erneut öffnen.
 
-Gerechnet wird mit Suchtiefe 14; eine Partie über 33 Halbzüge braucht auf
-einem normalen PC rund drei Sekunden, auf schwächerer Panel-Hardware
-entsprechend länger (der Fortschritt wird angezeigt).
+Enthalten sind:
+
+- **Eröffnungsname** aus der eingebetteten Datenbank (2833 Eröffnungen)
+- **Bewertungsverlauf** als Diagramm – ein Klick springt an die Stelle
+- **Genauigkeit** beider Spieler und eine grobe **Wertungsschätzung**
+  (erst ab 20 Halbzügen, bewusst nur ein Richtwert)
+- **Zugkategorien**: Glanzzug `!!`, Starker Zug `!`, Bester Zug, Gut,
+  Buchzug, Ungenau `?!`, Verpasst, Fehler `?`, Grober Fehler `??`
+- **Teilgenauigkeit** für Eröffnung, Mittelspiel und Endspiel
+- **Schlüsselmomente**: die drei größten Einbrüche der Partie
+
+##### Partie durchgehen
+
+Über *Partie durchgehen* lässt sich die Partie Zug für Zug nachspielen: das
+Brett zeigt die jeweilige Stellung, daneben stehen Bewertung, Einstufung des
+Zuges und – wenn er nicht der beste war – der Hinweis **„besser: …"**.
+Navigation über die Schaltflächen oder die Pfeiltasten.
+
+##### Rechenaufwand
+
+Die Analyse läuft in zwei Runden: zuerst jede Stellung mit Suchtiefe 14,
+danach werden nur die kritischen Stellungen (großer Bewertungssprung,
+höchstens acht davon) mit Tiefe 17 nachgerechnet. Ohne diese zweite Runde
+widerspricht sich die Engine in scharfen Stellungen – sie sieht ein Opfer
+erst eine Stellung später und würde ihren eigenen Empfehlungszug abstrafen.
+
+Eine Partie über 33 Halbzüge dauert so rund 16 Sekunden statt 115 Sekunden
+bei durchgehend hoher Tiefe. Auf schwächerer Panel-Hardware entsprechend
+länger; der Fortschritt wird angezeigt.
 
 #### Zugbewertung
 
@@ -125,6 +153,15 @@ Die Einstufung des letzten Zuges steht unter der Bewertung, die Zugliste
 markiert Ungenauigkeiten und schlechter farbig. Bewertet wird nur, solange
 die Partie Zug für Zug fortschreitet – wer mitten im Spiel als Zuschauer
 dazukommt, sieht Einstufungen erst ab seinem Beitritt.
+
+Zwei Regeln verhindern unsinnige Einstufungen:
+
+- Wer den von der Engine als besten ausgegebenen Zug spielt, verliert
+  definitionsgemäß nichts – sonst bestraft die stellungsweise Analyse ihre
+  eigene Empfehlung, wenn die Bewertung zwischen zwei Suchen schwankt.
+- Ein Buchzug gilt nur als solcher, wenn er die Stellung nicht verdirbt.
+  Das Narrenmatt steht als benannte Eröffnung in der Datenbank, `2. g4`
+  bleibt trotzdem ein grober Fehler.
 
 ### Platzbedarf in der SPS-Variable
 
