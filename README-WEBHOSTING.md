@@ -62,10 +62,8 @@ Einmalig vorbereiten:
 
 1. `deploy\deploy.config.example.bat` kopieren, in `deploy.config.bat`
    umbenennen und Benutzernamen eintragen.
-2. Passwort **nur** eintragen, wenn WinSCP installiert ist und die
-   Übertragung ohne Rückfrage durchlaufen soll. Bleibt das Feld leer,
-   nutzt das Skript das in Windows enthaltene `sftp` und fragt das
-   Passwort beim Start ab – dann steht es nirgends auf der Platte.
+2. Mehr ist nicht nötig – das Passwort fragt das Skript bei **jedem** Lauf
+   ab und speichert es nirgends.
 
 `deploy.config.bat` ist von `.gitignore` ausgeschlossen und landet nicht im
 Repository.
@@ -75,9 +73,13 @@ Adresse und die Prüf-URL.
 
 Voraussetzung ist eines von beidem:
 
-- **WinSCP** (winscp.net) – läuft ohne Rückfrage durch
-- **OpenSSH-Client** – in Windows 10/11 meist vorhanden, sonst unter
-  *Einstellungen → Apps → Optionale Features* nachinstallieren
+- **OpenSSH-Client** – in Windows 10/11 meist vorhanden und der bevorzugte
+  Weg: `sftp` fragt das Passwort selbst ab, verdeckt, und das Skript
+  bekommt es nie zu sehen. Fehlt er, unter *Einstellungen → Apps →
+  Optionale Features* nachinstallieren.
+- **WinSCP** (winscp.net) – Rückfallebene, falls `sftp` fehlt. Auch hier
+  wird das Passwort verdeckt abgefragt; es liegt allerdings kurz in einer
+  temporären Skriptdatei, die sofort nach der Übertragung gelöscht wird.
 
 ## Unterordner
 

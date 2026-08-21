@@ -3,13 +3,12 @@ setlocal enabledelayedexpansion
 rem ---------------------------------------------------------------
 rem  Laedt das Schachspiel per SFTP auf den Webspace.
 rem
-rem  Zugangsdaten kommen aus deploy.config.bat (liegt neben dieser Datei
-rem  und wird bewusst nicht ins Repository aufgenommen).
-rem  Vorlage: deploy.config.example.bat kopieren und ausfuellen.
+rem  Das Passwort wird bei jedem Lauf abgefragt und nirgends gespeichert.
+rem  In deploy.config.bat stehen nur Serveradresse, Benutzer und Zielordner.
 rem
-rem  Nutzt WinSCP, wenn vorhanden (laeuft dann ohne Rueckfrage durch),
-rem  sonst das in Windows enthaltene sftp - das fragt einmal nach dem
-rem  Passwort.
+rem  Bevorzugt wird das in Windows enthaltene sftp - es fragt das Passwort
+rem  selbst ab, verdeckt und ohne dass dieses Skript es je zu sehen bekommt.
+rem  Nur falls sftp fehlt, springt WinSCP ein.
 rem ---------------------------------------------------------------
 
 cd /d "%~dp0.."
@@ -21,7 +20,7 @@ if exist "%~dp0deploy.config.bat" (
   echo.
   echo   Es fehlt: deploy\deploy.config.bat
   echo   Bitte deploy\deploy.config.example.bat kopieren, umbenennen
-  echo   und die Zugangsdaten eintragen.
+  echo   und den Benutzernamen eintragen.
   echo.
   pause
   exit /b 1
@@ -55,7 +54,30 @@ if exist "%ROOT%\stockfish-18-lite-single.wasm" (
   echo   Hinweis: Engine-Dateien fehlen - gespielt werden kann, die Analyse bleibt aus.
 )
 
-rem --- Befehlsliste fuer die Uebertragung aufbauen -----------------
+echo.
+echo === Uebertragung nach %SFTP_USER%@%SFTP_HOST%%SFTP_DIR% ===
+
+where sftp >nul 2>&1
+if not errorlevel 1 goto :usesftp
+
+set "WINSCP="
+if exist "%ProgramFiles(x86)%\WinSCP\WinSCP.com" set "WINSCP=%ProgramFiles(x86)%\WinSCP\WinSCP.com"
+if exist "%ProgramFiles%\WinSCP\WinSCP.com" set "WINSCP=%ProgramFiles%\WinSCP\WinSCP.com"
+if not defined WINSCP (
+  where WinSCP.com >nul 2>&1 && set "WINSCP=WinSCP.com"
+)
+if defined WINSCP goto :usewinscp
+
+echo.
+echo   Weder sftp noch WinSCP gefunden.
+echo   Entweder unter Windows-Einstellungen ^> Apps ^> Optionale Features
+echo   den "OpenSSH-Client" nachinstallieren oder WinSCP ^(winscp.net^).
+pause
+exit /b 1
+
+
+rem ================= Weg 1: Windows-eigenes sftp ==================
+:usesftp
 set "LIST=%TEMP%\chess-sftp-%RANDOM%.txt"
 > "%LIST%" echo cd %SFTP_DIR%
 >> "%LIST%" echo lcd "%ROOT%"
@@ -77,67 +99,62 @@ rem Schreibrecht fuer die Zustandsdatei; scheitert auf manchen Tarifen - egal
 >> "%LIST%" echo -chmod 777 .
 >> "%LIST%" echo bye
 
-rem --- WinSCP bevorzugen -------------------------------------------
-set "WINSCP="
-if exist "%ProgramFiles(x86)%\WinSCP\WinSCP.com" set "WINSCP=%ProgramFiles(x86)%\WinSCP\WinSCP.com"
-if exist "%ProgramFiles%\WinSCP\WinSCP.com" set "WINSCP=%ProgramFiles%\WinSCP\WinSCP.com"
-if not defined WINSCP (
-  where WinSCP.com >nul 2>&1 && set "WINSCP=WinSCP.com"
-)
-
-echo.
-echo === Uebertragung nach %SFTP_USER%@%SFTP_HOST%%SFTP_DIR% ===
-
-rem Verkettetes "if a if b (..) else (..)" bindet das else an das innere if -
-rem darum die Entscheidung vorher in ein Kennzeichen aufloesen.
-set "USEWINSCP="
-if defined WINSCP if not "%SFTP_PASS%"=="" set "USEWINSCP=1"
-
-if defined USEWINSCP (
-  echo   ^(WinSCP, laeuft ohne Rueckfrage^)
-  "%WINSCP%" /log="%TEMP%\chess-winscp.log" /command ^
-    "option batch continue" ^
-    "option confirm off" ^
-    "open sftp://%SFTP_USER%:%SFTP_PASS%@%SFTP_HOST%/ -hostkey=""*""" ^
-    "cd %SFTP_DIR%" ^
-    "lcd ""%ROOT%""" ^
-    "put chess.html index.html" ^
-    "put stockfish-18-lite-single.js" ^
-    "put stockfish-18-lite-single.wasm" ^
-    "put php\.htaccess .htaccess" ^
-    "mkdir api" ^
-    "cd api" ^
-    "lcd ""%ROOT%\php\api""" ^
-    "put state.php" ^
-    "put health.php" ^
-    "put reset.php" ^
-    "put .htaccess .htaccess" ^
-    "chmod 777 ." ^
-    "exit"
-  set "RC=!ERRORLEVEL!"
-) else (
-  echo   ^(Windows-sftp - das Passwort wird gleich abgefragt^)
-  where sftp >nul 2>&1
-  if errorlevel 1 (
-    echo.
-    echo   Weder WinSCP noch sftp gefunden.
-    echo   Entweder WinSCP installieren ^(winscp.net^) oder unter
-    echo   Windows-Einstellungen den "OpenSSH-Client" nachinstallieren.
-    del "%LIST%" >nul 2>&1
-    pause
-    exit /b 1
-  )
-  sftp -oBatchMode=no -b "%LIST%" %SFTP_USER%@%SFTP_HOST%
-  set "RC=!ERRORLEVEL!"
-)
-
+echo   ^(sftp fragt das Passwort gleich selbst ab^)
+rem -b schaltet die Passwortabfrage sonst ab
+sftp -oBatchMode=no -b "%LIST%" %SFTP_USER%@%SFTP_HOST%
+set "RC=!ERRORLEVEL!"
 del "%LIST%" >nul 2>&1
+goto :done
 
+
+rem ============ Weg 2: WinSCP, falls sftp fehlt ===================
+:usewinscp
+echo   ^(WinSCP - Passwort wird verdeckt abgefragt^)
+set "PW="
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command ^
+  "$s=Read-Host -AsSecureString 'Passwort'; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))"`) do set "PW=%%P"
+if "!PW!"=="" (
+  echo   Kein Passwort eingegeben - abgebrochen.
+  pause
+  exit /b 1
+)
+
+rem WinSCP nimmt das Passwort nur aus Befehlszeile oder Skriptdatei entgegen.
+rem Die Datei wird direkt nach dem Lauf wieder geloescht.
+set "WS=%TEMP%\chess-winscp-%RANDOM%.txt"
+> "%WS%" echo option batch continue
+>> "%WS%" echo option confirm off
+>> "%WS%" echo open sftp://%SFTP_USER%:!PW!@%SFTP_HOST%/ -hostkey="*"
+>> "%WS%" echo cd %SFTP_DIR%
+>> "%WS%" echo lcd "%ROOT%"
+>> "%WS%" echo put chess.html index.html
+if defined WITHENGINE (
+  >> "%WS%" echo put stockfish-18-lite-single.js
+  >> "%WS%" echo put stockfish-18-lite-single.wasm
+)
+>> "%WS%" echo put php\.htaccess .htaccess
+>> "%WS%" echo mkdir api
+>> "%WS%" echo cd api
+>> "%WS%" echo lcd "%ROOT%\php\api"
+>> "%WS%" echo put state.php
+>> "%WS%" echo put health.php
+>> "%WS%" echo put reset.php
+>> "%WS%" echo put .htaccess .htaccess
+>> "%WS%" echo chmod 777 .
+>> "%WS%" echo exit
+
+"%WINSCP%" /script="%WS%"
+set "RC=!ERRORLEVEL!"
+set "PW="
+del "%WS%" >nul 2>&1
+goto :done
+
+
+:done
 echo.
 if not "%RC%"=="0" (
   echo === Fehlgeschlagen ^(Code %RC%^) ===
-  echo   Zugangsdaten pruefen. Bei WinSCP steht mehr im Protokoll:
-  echo   %TEMP%\chess-winscp.log
+  echo   Benutzername, Serveradresse und Passwort pruefen.
   pause
   exit /b %RC%
 )
