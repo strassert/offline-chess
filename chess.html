@@ -4622,8 +4622,28 @@ document.getElementById('lobbyLeave').addEventListener('click',()=>leaveSeat(fal
 /* ---------- Server-Transport (LXC-Container) ----------
    Der Node-Server hält den Spielstand und schiebt Änderungen per
    Server-Sent Events sofort an alle Clients – kein Abfragen im Sekundentakt. */
+/* ---------- Server-Transport ----------
+   Zwei Gegenstellen: der Node-Server (schiebt Änderungen per Ereignisstrom)
+   und die PHP-Fassung für klassisches Webhosting (wird abgefragt). Welche
+   vorhanden ist, ermittelt detectApi(). */
+const Api={base:'',ext:'',sse:true};
+function apiUrl(name){ return Api.base+'api/'+name+Api.ext; }
+async function detectApi(){
+  const dir=location.pathname.replace(/[^/]*$/,'');   // erlaubt Unterordner
+  for(const c of [{ext:'',sse:true},{ext:'.php',sse:false}]){
+    try{
+      const r=await fetch(dir+'api/health'+c.ext,{cache:'no-store'});
+      if(!r.ok) continue;
+      let j={}; try{ j=await r.json(); }catch(e){}
+      Api.base=dir; Api.ext=c.ext; Api.sse=c.sse&&j.backend!=='php';
+      return true;
+    }catch(e){}
+  }
+  return false;
+}
+
 function setupServer(){
-  Sync.transport={ send:(val)=>fetch('/api/state',
+  Sync.transport={ send:(val)=>fetch(apiUrl('state'),
     {method:'POST',headers:{'Content-Type':'text/plain'},body:val}).catch(()=>{}) };
   Sync.ready=false;
   applySide(); showLobby();
@@ -4636,18 +4656,20 @@ function setupServer(){
     } else if(txt!==Sync.last){ Sync.receive(txt); }
   }
   let live=false;
-  try{
-    const es=new EventSource('/api/events');
-    es.onmessage=(e)=>{ live=true; try{ apply(JSON.parse(e.data).s); }catch(err){} };
-    es.onerror=()=>{ live=false; };        // Abfragen springt dann ein
-  }catch(e){}
-  // Sicherheitsnetz, falls der Ereignisstrom hängt oder blockiert wird
+  if(Api.sse){
+    try{
+      const es=new EventSource(apiUrl('events'));
+      es.onmessage=(e)=>{ live=true; try{ apply(JSON.parse(e.data).s); }catch(err){} };
+      es.onerror=()=>{ live=false; };      // Abfragen springt dann ein
+    }catch(e){}
+  }
   async function poll(){
     if(live&&Sync.ready) return;
-    try{ const r=await fetch('/api/state',{cache:'no-store'});
+    try{ const r=await fetch(apiUrl('state'),{cache:'no-store'});
          apply((await r.json()).s); }catch(e){}
   }
-  poll(); setInterval(poll,3000);
+  poll();
+  setInterval(poll,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
 }
 
 document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
@@ -4678,9 +4700,7 @@ if(_q.indexOf('plc')>=0){
   Sync.transport={ send:(s)=>bc.postMessage(s) };
   bc.onmessage=(e)=>Sync.receive(e.data);
 } else if(location.protocol!=='file:'){
-  fetch('/api/health',{cache:'no-store'})
-    .then(r=>{ if(r.ok) setupServer(); })   // sonst bleibt es beim Hotseat
-    .catch(()=>{});
+  detectApi().then(found=>{ if(found) setupServer(); });   // sonst Hotseat
 }
 </script>
 </body>

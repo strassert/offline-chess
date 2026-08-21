@@ -1,0 +1,22 @@
+# Ohne diesen Eintrag liefert Apache die Engine als unbekannten Dateityp aus,
+# und der Browser lädt sie langsamer oder gar nicht.
+AddType application/wasm .wasm
+
+# Engine-Dateien ändern sich nie – lange vorhalten, Seite dagegen frisch holen
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType application/wasm "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
+
+# ---------------------------------------------------------------
+# Passwortschutz: einkommentieren, wenn die Seite öffentlich erreichbar ist.
+# Ohne Schutz kann jeder, der die Adresse kennt, in laufende Partien schreiben.
+# .htpasswd erzeugen (lokal oder per Webhoster-Oberfläche):
+#     htpasswd -c /pfad/zu/.htpasswd spieler
+# ---------------------------------------------------------------
+# AuthType Basic
+# AuthName "Schach"
+# AuthUserFile /absoluter/pfad/zu/.htpasswd
+# Require valid-user
