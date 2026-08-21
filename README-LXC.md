@@ -22,16 +22,29 @@ braucht daher kaum Leistung.
 
 ## Installation
 
-Projekt in den Container kopieren (z. B. per `git clone`, `scp` oder als
-Archiv) und im Projektverzeichnis als root ausführen:
+In der Container-Konsole als root – das Skript holt alles Weitere selbst
+von GitHub:
+
+**Solange das Repository privat ist**, wird ein GitHub-Token mit Leserecht
+gebraucht (Einstellungen → Developer settings → Personal access tokens,
+Berechtigung *Contents: read*):
 
 ```sh
-sh server/install.sh
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/strassert/offline-chess/lxc-server/server/bootstrap.sh | sh
 ```
 
-Das Skript installiert Node, legt den Benutzer `chess` an, kopiert die
-Dateien nach `/opt/offline-chess`, richtet den systemd-Dienst ein und
-startet ihn.
+**Ist das Repository öffentlich**, genügt:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/strassert/offline-chess/lxc-server/server/bootstrap.sh | sh
+```
+
+Das Skript installiert fehlende Pakete (git, Node), klont den Branch nach
+`/opt/offline-chess`, legt den Dienstbenutzer `chess` an, richtet den
+systemd-Dienst ein, startet ihn und prüft, ob er antwortet. Am Ende steht
+die fertige Adresse in der Konsole.
 
 Danach ist das Spiel erreichbar unter:
 
@@ -40,6 +53,35 @@ http://<container-ip>:8080/
 ```
 
 Ohne URL-Zusatz – die Seite erkennt den Server selbst.
+
+### Aktualisieren
+
+Derselbe Aufruf noch einmal – oder direkt im Container:
+
+```sh
+sh /opt/offline-chess/server/bootstrap.sh
+```
+
+Holt den neuen Stand und startet den Dienst neu. Der laufende Spielstand
+in `/var/lib/offline-chess/` bleibt erhalten.
+
+### Einstellungen beim Aufruf
+
+| Variable | Bedeutung | Vorgabe |
+|----------|-----------|---------|
+| `GITHUB_TOKEN` | Token für privates Repository | – |
+| `BRANCH` | zu installierender Branch | `lxc-server` |
+| `PORT` | Port des Dienstes | `8080` |
+| `APP` | Programmverzeichnis | `/opt/offline-chess` |
+| `DATA` | Verzeichnis für den Spielstand | `/var/lib/offline-chess` |
+| `SKIP_SERVICE` | nur Dateien holen, kein systemd | – |
+
+Beispiel: `PORT=9000 BRANCH=main sh bootstrap.sh`
+
+### Dateien schon im Container?
+
+Liegt das Projekt bereits lokal (per `scp` oder Archiv), richtet
+`sh server/install.sh` denselben Dienst ohne GitHub-Zugriff ein.
 
 ## Dienst verwalten
 
