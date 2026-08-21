@@ -53,6 +53,32 @@ Prüfen lässt sich der Server-Teil direkt:
 liefern. Steht dort `"writable":false`, fehlen die Schreibrechte aus
 Schritt 2.
 
+## Hochladen per Skript (Windows)
+
+Statt von Hand: `deploy\deploy-sftp.bat` überträgt alle Dateien, legt `api/`
+an und setzt die Schreibrechte.
+
+Einmalig vorbereiten:
+
+1. `deploy\deploy.config.example.bat` kopieren, in `deploy.config.bat`
+   umbenennen und Benutzernamen eintragen.
+2. Passwort **nur** eintragen, wenn WinSCP installiert ist und die
+   Übertragung ohne Rückfrage durchlaufen soll. Bleibt das Feld leer,
+   nutzt das Skript das in Windows enthaltene `sftp` und fragt das
+   Passwort beim Start ab – dann steht es nirgends auf der Platte.
+
+`deploy.config.bat` ist von `.gitignore` ausgeschlossen und landet nicht im
+Repository.
+
+Danach genügt ein Doppelklick auf `deploy-sftp.bat`. Am Ende nennt es die
+Adresse und die Prüf-URL.
+
+Voraussetzung ist eines von beidem:
+
+- **WinSCP** (winscp.net) – läuft ohne Rückfrage durch
+- **OpenSSH-Client** – in Windows 10/11 meist vorhanden, sonst unter
+  *Einstellungen → Apps → Optionale Features* nachinstallieren
+
 ## Unterordner
 
 Ein Upload nach `/schach/` funktioniert genauso – die Seite bestimmt ihren
