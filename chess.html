@@ -4524,6 +4524,37 @@ document.getElementById('recapBtn').addEventListener('click',()=>{
 document.getElementById('lobbyStart').addEventListener('click',startGame);
 document.getElementById('lobbyLeave').addEventListener('click',()=>leaveSeat(false));
 
+/* ---------- Server-Transport (LXC-Container) ----------
+   Der Node-Server hält den Spielstand und schiebt Änderungen per
+   Server-Sent Events sofort an alle Clients – kein Abfragen im Sekundentakt. */
+function setupServer(){
+  Sync.transport={ send:(val)=>fetch('/api/state',
+    {method:'POST',headers:{'Content-Type':'text/plain'},body:val}).catch(()=>{}) };
+  Sync.ready=false;
+  applySide(); showLobby();
+
+  function apply(txt){
+    if(typeof txt!=='string') return;
+    if(!Sync.ready){                       // erster Stand: alles übernehmen
+      Sync.last=txt; applyState(parseState(txt));
+      Sync.ready=true; renderLobby();
+    } else if(txt!==Sync.last){ Sync.receive(txt); }
+  }
+  let live=false;
+  try{
+    const es=new EventSource('/api/events');
+    es.onmessage=(e)=>{ live=true; try{ apply(JSON.parse(e.data).s); }catch(err){} };
+    es.onerror=()=>{ live=false; };        // Abfragen springt dann ein
+  }catch(e){}
+  // Sicherheitsnetz, falls der Ereignisstrom hängt oder blockiert wird
+  async function poll(){
+    if(live&&Sync.ready) return;
+    try{ const r=await fetch('/api/state',{cache:'no-store'});
+         apply((await r.json()).s); }catch(e){}
+  }
+  poll(); setInterval(poll,3000);
+}
+
 document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
 document.getElementById('seatB').addEventListener('click',()=>takeSeat('b'));
 document.getElementById('seatV').addEventListener('click',watchOnly);
@@ -4537,13 +4568,22 @@ document.getElementById('flipBtn').addEventListener('click',()=>{flipped=!flippe
 newGame();                   // frisches Brett – Transport hängt noch nicht -> kein Publish
 
 // Transport nach newGame() wählen, damit der Start keinen Reset an den Peer sendet
+/* Betriebsart wählen: ?plc erzwingt die Steuerung, ?srv den Server, ?demo
+   zwei Tabs. Ohne Angabe wird geprüft, ob ein Server antwortet – wird die
+   Seite vom LXC-Container ausgeliefert, läuft sie damit ohne Zusatz-URL. */
 const _q=location.search;
 if(_q.indexOf('plc')>=0){
   setupPLC();
+} else if(_q.indexOf('srv')>=0){
+  setupServer();
 } else if(_q.indexOf('demo')>=0 && 'BroadcastChannel' in window){
   const bc=new BroadcastChannel('chess-sync');
   Sync.transport={ send:(s)=>bc.postMessage(s) };
   bc.onmessage=(e)=>Sync.receive(e.data);
+} else if(location.protocol!=='file:'){
+  fetch('/api/health',{cache:'no-store'})
+    .then(r=>{ if(r.ok) setupServer(); })   // sonst bleibt es beim Hotseat
+    .catch(()=>{});
 }
 </script>
 </body>

@@ -1,0 +1,27 @@
+[Unit]
+Description=Offline-Schach (Server für Netzwerk-Partien)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chess
+Group=chess
+WorkingDirectory=/opt/offline-chess
+ExecStart=/usr/bin/node /opt/offline-chess/server/server.js
+Environment=PORT=8080
+Environment=HOST=0.0.0.0
+Environment=ROOT=/opt/offline-chess
+Environment=STATE_FILE=/var/lib/offline-chess/state.txt
+Restart=always
+RestartSec=3
+
+# Der Dienst braucht nur sein Datenverzeichnis beschreibbar
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/offline-chess
+
+[Install]
+WantedBy=multi-user.target
