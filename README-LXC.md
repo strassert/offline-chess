@@ -39,23 +39,19 @@ von GitHub.
 > git clone --depth 1 -b lxc-server https://github.com/strassert/offline-chess.git /opt/offline-chess
 > sh /opt/offline-chess/server/bootstrap.sh
 > ```
->
-> (Bei privatem Repository fragt `git clone` nach Benutzername und Token.)
 
-**Solange das Repository privat ist**, wird ein GitHub-Token mit Leserecht
-gebraucht (Einstellungen → Developer settings → Personal access tokens,
-Berechtigung *Contents: read*):
+```sh
+curl -fsSL https://raw.githubusercontent.com/strassert/offline-chess/lxc-server/server/bootstrap.sh | sh
+```
+
+Sollte das Repository einmal auf privat stehen, wird zusätzlich ein
+GitHub-Token mit Leserecht gebraucht (Einstellungen → Developer settings →
+Personal access tokens, Berechtigung *Contents: read*):
 
 ```sh
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
   https://raw.githubusercontent.com/strassert/offline-chess/lxc-server/server/bootstrap.sh | sh
-```
-
-**Ist das Repository öffentlich**, genügt:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/strassert/offline-chess/lxc-server/server/bootstrap.sh | sh
 ```
 
 Das Skript installiert fehlende Pakete (git, Node), klont den Branch nach
