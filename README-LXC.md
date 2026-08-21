@@ -23,7 +23,24 @@ braucht daher kaum Leistung.
 ## Installation
 
 In der Container-Konsole als root – das Skript holt alles Weitere selbst
-von GitHub:
+von GitHub.
+
+> Minimale Debian-Vorlagen bringen weder `curl` noch `wget` mit. Meldet die
+> Konsole `curl: command not found`, zuerst nachinstallieren:
+>
+> ```sh
+> apt update && apt install -y curl ca-certificates
+> ```
+>
+> Wer lieber ganz ohne Download-Werkzeug startet, kann auch direkt klonen:
+>
+> ```sh
+> apt update && apt install -y git
+> git clone --depth 1 -b lxc-server https://github.com/strassert/offline-chess.git /opt/offline-chess
+> sh /opt/offline-chess/server/bootstrap.sh
+> ```
+>
+> (Bei privatem Repository fragt `git clone` nach Benutzername und Token.)
 
 **Solange das Repository privat ist**, wird ein GitHub-Token mit Leserecht
 gebraucht (Einstellungen → Developer settings → Personal access tokens,

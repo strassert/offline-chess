@@ -35,7 +35,6 @@ say "Pakete prüfen"
 MISSING=""
 command -v git  >/dev/null 2>&1 || MISSING="$MISSING git"
 command -v node >/dev/null 2>&1 || MISSING="$MISSING nodejs"
-command -v curl >/dev/null 2>&1 || MISSING="$MISSING curl"
 [ -f /etc/ssl/certs/ca-certificates.crt ] || MISSING="$MISSING ca-certificates"
 if [ -n "$MISSING" ]; then
   echo "Installiere:$MISSING"
@@ -126,12 +125,17 @@ systemctl enable -q offline-chess
 systemctl restart offline-chess
 
 say "Prüfen"
+# Über Node abfragen – so wird weder curl noch wget im Container gebraucht
+health() {
+  node -e "require('http').get({host:'127.0.0.1',port:$PORT,path:'/api/health',timeout:2000},
+    r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" 2>/dev/null
+}
 i=0
 while [ $i -lt 20 ]; do
-  if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then break; fi
+  health && break
   i=$((i + 1)); sleep 1
 done
-if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+if health; then
   IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   printf '\nLäuft. Aufrufen unter:  http://%s:%s/\n\n' "${IP:-<container-ip>}" "$PORT"
   echo "Protokoll:  journalctl -u offline-chess -f"
