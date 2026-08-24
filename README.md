@@ -57,8 +57,8 @@ bleibt (z. B. PC ausgeschaltet), gibt *Plätze zurücksetzen* alles frei.
 
 ### Bedenkzeit
 
-Vor dem Start wählen die Spieler den Modus **3 + 2** (3 Minuten plus
-2 Sekunden pro Zug) oder **10 Min** (ohne Inkrement). Das Brett bleibt
+Vor dem Start wählen die Spieler den Modus **3 + 2**, **5 + 5** (Minuten
+plus Sekunden je Zug) oder **10 Min** (ohne Inkrement). Das Brett bleibt
 gesperrt, bis ein Spieler *Spiel starten* drückt. Läuft eine Uhr ab, endet
 die Partie und das Ergebnis wird allen angezeigt – ebenso bei Schachmatt
 oder Patt.
