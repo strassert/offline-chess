@@ -68,6 +68,17 @@ Empfang des Zustands herunter, verbindlich rechnet der ziehende Spieler ab.
 Dadurch ist keine Uhrzeit-Synchronisation zwischen den PCs nötig; pro Zug
 kann die Anzeige um die Abfragezeit (max. 1 s) abweichen.
 
+### Vergangene Partien
+
+Endet eine Partie, wird sie mit Namen, Ausgang, Zuganzahl und Zeitpunkt
+festgehalten. Die letzten sechs Partien stehen in der Lobby und unter der
+Auswertung. Den Eintrag schreibt nur der Client, der das Ende auslöst –
+die anderen bekommen ihn über den geteilten Zustand, sonst stünde jede
+Partie mehrfach in der Liste.
+
+Im Hotseat-Betrieb liegt die Liste im Browser (localStorage), sonst
+gemeinsam im Zustandsstring.
+
 ### Anzeige im Spiel
 
 Das Seitenpanel zeigt beide Spieler mit Namen und Restzeit (die Seite am
@@ -179,10 +190,13 @@ w=<id>:<Name>;b=<id>:<Name>;v=<id>:<Name>,…;tc=180+2;tw=<ms>;tb=<ms>;st=run;re
 ```
 
 Der Kopf ist rund 120 Zeichen lang, je Zuschauer kommen ~20 dazu (maximal
-8 Zuschauer werden übertragen), die Zugliste wächst um ~5 Zeichen pro Zug.
-Für eine lange Partie mit mehreren Zuschauern sollte die Variable daher
-großzügig dimensioniert sein – `STRING[1000]` reicht für etwa 60 Züge mit
-voller Zuschauerliste, für längere Partien entsprechend größer wählen.
+8 Zuschauer werden übertragen), die Historie bis zu 230, und die Zugliste
+wächst um ~5 Zeichen pro Zug.
+
+**Empfohlen ist `STRING[2000]`.** Damit passt selbst der ungünstigste Fall:
+volle Zuschauerliste, sechs Historieneinträge und 120 Halbzüge ergeben rund
+1100 Zeichen. `STRING[1000]` reicht nur für kurze Partien – darüber wird der
+String abgeschnitten.
 
 ### Voraussetzungen für `?plc`
 

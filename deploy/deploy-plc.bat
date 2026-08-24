@@ -14,7 +14,7 @@ rem  Klappt das hier nicht, bleibt der Weg ueber das
 rem  Automation-Studio-Projekt (Datei in USER\web, dann Transfer).
 rem ---------------------------------------------------------------
 
-set "PLCHOST=strassert.brdev.net"
+set "PLCHOST=chss.dev.net"
 set "PLCDRIVE=F:"
 set "PLCDIR=web"
 set "REPO=strassert/offline-chess"
