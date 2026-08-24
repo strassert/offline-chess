@@ -133,6 +133,8 @@
     font-size:12px; padding:6px;}
   .histbox{margin-top:8px; text-align:left; max-height:210px; overflow:auto;}
   .histleer{font-size:12px; opacity:.4; padding:6px 2px;}
+  .histwarn{font-size:11px; line-height:1.4; color:var(--sel); background:#2f2a1c;
+    border-radius:6px; padding:7px 8px; margin-bottom:8px;}
   .histtabs{display:flex; gap:6px; margin-top:16px;}
   .httab{flex:1; padding:7px 0; border-radius:7px; border:1px solid #4a505c;
     background:#1c1f26; color:var(--text); font-size:12px; cursor:pointer;}
@@ -3893,7 +3895,7 @@ function loadLocalHist(){
    Getrennt vom Spielstand: sie aendert sich nur am Partieende und darf
    deshalb viel mehr Partien fassen. Gelesen wird sie nur, wenn sie
    jemand sieht (Lobby, Auswertung) - nicht im Sekundentakt. */
-const Hist={ load:null, save:null, at:0 };
+const Hist={ load:null, save:null, at:0, broken:false };
 function histToText(){ return hist.map(e=>[e.w,e.b,e.r,e.n,e.t].join('~')).join('!'); }
 function histFromText(v){
   hist=(v||'').split('!').filter(Boolean).map(e=>{
@@ -3907,13 +3909,27 @@ async function refreshHist(force){
   const now=Date.now();
   if(!force && now-Hist.at<5000) return;      // hoechstens alle 5 s nachsehen
   Hist.at=now;
-  try{ const v=await Hist.load(); if(typeof v==='string'){ histFromText(v); renderHist(); } }
-  catch(e){}
+  let v;
+  try{ v=await Hist.load(); }
+  catch(e){                                   // Ablage nicht erreichbar
+    Hist.broken=true;
+    if(!hist.length) loadLocalHist();         // wenigstens der eigene Stand
+    renderHist(); return;
+  }
+  if(typeof v!=='string' || v.indexOf('<')>=0) return;   // Fehlerseite statt Daten
+  const t=v.trim();
+  // Eine leere Ablage darf einen vorhandenen Stand nicht loeschen - sie wird
+  // stattdessen nachgeschrieben. Sonst verschwaende ein fehlgeschlagener
+  // Schreibvorgang die gerade beendete Partie.
+  if(!t){ if(hist.length) storeHist(); return; }
+  Hist.broken=false;
+  histFromText(t); renderHist();
 }
 async function storeHist(){
   if(!Hist.save) return;
   Hist.at=Date.now();
-  try{ await Hist.save(histToText()); }catch(e){}
+  try{ await Hist.save(histToText()); Hist.broken=false; }
+  catch(e){ Hist.broken=true; saveLocalHist(); renderHist(); }
 }
 function tickClocks(){
   if(!Sync.transport) return;
@@ -4495,10 +4511,13 @@ function boardHtml(){
 let histTab='games';
 function renderHist(){
   const html=(histTab==='board')?boardHtml():histHtml();
+  const warn=Hist.broken?'<div class="histwarn">Historie kann nicht gespeichert '+
+    'werden – Variable '+esc(Hist.name||'gChessHist')+' auf der Steuerung anlegen. '+
+    'Bis dahin merkt sie sich dieser Browser.</div>':'';
   const leer=hist.length?'':'<div class="histleer">Noch keine Partien gespielt.</div>';
   for(const id of ['lobbyHist','recapHist']){
     const el=document.getElementById(id);
-    if(el) el.innerHTML=html||leer;
+    if(el) el.innerHTML=warn+(html||leer);
   }
   for(const b of document.querySelectorAll('.httab'))
     b.classList.toggle('on',b.dataset.tab===histTab);
@@ -4721,10 +4740,15 @@ function setupPLC(){
   const hbody=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(hpv)+tail;
   Hist.load=async()=>{
     const r=await fetch(G,{method:'POST',body:hbody('&value=none&read=1')});
+    if(!r.ok) throw new Error('Lesen '+r.status);     // Variable fehlt -> 400
     return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
   };
-  Hist.save=(val)=>fetch(G,{method:'POST',
-    body:hbody('&value='+encodeURIComponent(val)+'&write=1')});
+  Hist.save=async(val)=>{
+    const r=await fetch(G,{method:'POST',
+      body:hbody('&value='+encodeURIComponent(val)+'&write=1')});
+    if(!r.ok) throw new Error('Schreiben '+r.status);
+  };
+  Hist.name=hpv;
 
   const side=(params.get('side')||'').toLowerCase().charAt(0);
   applySide(); showLobby();
@@ -4801,9 +4825,16 @@ function setupServer(){
     {method:'POST',headers:{'Content-Type':'text/plain'},body:val}).catch(()=>{}) };
   Sync.ready=false;
 
-  Hist.load=async()=>(await (await fetch(apiUrl('hist'),{cache:'no-store'})).json()).s;
-  Hist.save=(val)=>fetch(apiUrl('hist'),
-    {method:'POST',headers:{'Content-Type':'text/plain'},body:val});
+  Hist.load=async()=>{
+    const r=await fetch(apiUrl('hist'),{cache:'no-store'});
+    if(!r.ok) throw new Error('Lesen '+r.status);
+    return (await r.json()).s;
+  };
+  Hist.save=async(val)=>{
+    const r=await fetch(apiUrl('hist'),
+      {method:'POST',headers:{'Content-Type':'text/plain'},body:val});
+    if(!r.ok) throw new Error('Schreiben '+r.status);
+  };
   applySide(); showLobby();
 
   function apply(txt){
