@@ -29,11 +29,13 @@ Ergebnis auf dem Webspace:
 └── api/
     ├── .htaccess
     ├── health.php
+    ├── hist.php
     ├── reset.php
     └── state.php
 ```
 
-Die Datei `api/state.txt` legt PHP beim ersten Zug selbst an.
+Die Dateien `api/state.txt` (Spielstand) und `api/hist.txt` (vergangene
+Partien) legt PHP selbst an.
 
 ## Schritte
 

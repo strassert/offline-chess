@@ -68,16 +68,39 @@ Empfang des Zustands herunter, verbindlich rechnet der ziehende Spieler ab.
 Dadurch ist keine Uhrzeit-Synchronisation zwischen den PCs nötig; pro Zug
 kann die Anzeige um die Abfragezeit (max. 1 s) abweichen.
 
-### Vergangene Partien
+### Vergangene Partien und Rangliste
 
 Endet eine Partie, wird sie mit Namen, Ausgang, Zuganzahl und Zeitpunkt
-festgehalten. Die letzten sechs Partien stehen in der Lobby und unter der
-Auswertung. Den Eintrag schreibt nur der Client, der das Ende auslöst –
-die anderen bekommen ihn über den geteilten Zustand, sonst stünde jede
-Partie mehrfach in der Liste.
+festgehalten. Die letzten **40** Partien stehen in der Lobby und unter der
+Auswertung, umschaltbar zwischen *Partien* und *Rangliste*.
 
-Im Hotseat-Betrieb liegt die Liste im Browser (localStorage), sonst
-gemeinsam im Zustandsstring.
+Die Rangliste zählt wie im Schach üblich: Sieg 1, Remis ½, Niederlage 0.
+Sortiert wird nach Siegquote, bei Gleichstand nach Anzahl der Partien. Wer
+weniger als drei Partien hat, wird gedämpft dargestellt – eine Quote aus
+einer einzigen Partie sagt wenig.
+
+Den Eintrag schreibt nur der Client, der das Ende auslöst; die anderen
+laden ihn nach. Sonst stünde jede Partie mehrfach in der Liste.
+
+#### Eigene Ablage
+
+Die Historie liegt **getrennt vom Spielstand**, weil sie sich nur am
+Partieende ändert und viel länger leben soll:
+
+| Betriebsart | Ablage |
+|-------------|--------|
+| Steuerung | zweite Variable, Vorgabe `gChessHist` (über `?hpv=` änderbar) |
+| Node-Server | `hist.txt` neben dem Spielstand |
+| PHP-Webhosting | `api/hist.txt` |
+| Hotseat | Browser-Speicher (localStorage) |
+
+Gelesen wird sie nur, wenn sie jemand sieht – beim Öffnen der Lobby, beim
+Anzeigen der Auswertung und nach einem Partieende, höchstens alle fünf
+Sekunden. Im laufenden Spiel bleibt es damit bei einer Abfrage pro Sekunde.
+
+**Variable auf der Steuerung:** `gChessHist : STRING[2000]`, am besten
+**remanent** – dann übersteht die Historie einen Neustart der Steuerung.
+Ein Eintrag misst höchstens 38 Zeichen, 40 Einträge also rund 1520.
 
 ### Anzeige im Spiel
 
@@ -190,13 +213,11 @@ w=<id>:<Name>;b=<id>:<Name>;v=<id>:<Name>,…;tc=180+2;tw=<ms>;tb=<ms>;st=run;re
 ```
 
 Der Kopf ist rund 120 Zeichen lang, je Zuschauer kommen ~20 dazu (maximal
-8 Zuschauer werden übertragen), die Historie bis zu 230, und die Zugliste
-wächst um ~5 Zeichen pro Zug.
+8 Zuschauer werden übertragen), die Zugliste wächst um ~5 Zeichen pro Zug.
+Die Historie liegt seit ihrer Trennung nicht mehr hier drin.
 
-**Empfohlen ist `STRING[2000]`.** Damit passt selbst der ungünstigste Fall:
-volle Zuschauerliste, sechs Historieneinträge und 120 Halbzüge ergeben rund
-1100 Zeichen. `STRING[1000]` reicht nur für kurze Partien – darüber wird der
-String abgeschnitten.
+**Empfohlen ist `STRING[2000]`.** Damit passt auch eine lange Partie mit
+voller Zuschauerliste: 120 Halbzüge ergeben rund 880 Zeichen.
 
 ### Voraussetzungen für `?plc`
 

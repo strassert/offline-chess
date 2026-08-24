@@ -1,5 +1,5 @@
 # Die Zustandsdatei gehört nicht ins Web – nur die PHP-Dateien lesen sie.
-<Files "state.txt">
+<FilesMatch "\.(txt)$">
   <IfModule mod_authz_core.c>
     Require all denied
   </IfModule>
@@ -7,4 +7,4 @@
     Order allow,deny
     Deny from all
   </IfModule>
-</Files>
+</FilesMatch>

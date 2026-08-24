@@ -112,6 +112,7 @@ Einstellungen stehen in `/etc/systemd/system/offline-chess.service`:
 | `HOST` | Netzwerkschnittstelle | `0.0.0.0` |
 | `ROOT` | Verzeichnis mit `chess.html` | `/opt/offline-chess` |
 | `STATE_FILE` | Datei für den Spielstand | `/var/lib/offline-chess/state.txt` |
+| `HIST_FILE` | Datei für die Historie | neben `STATE_FILE` als `hist.txt` |
 
 Nach Änderungen `systemctl daemon-reload && systemctl restart offline-chess`.
 
@@ -120,6 +121,8 @@ Nach Änderungen `systemctl daemon-reload && systemctl restart offline-chess`.
 | Pfad | Zweck |
 |------|-------|
 | `GET /api/state` | aktueller Spielstand |
+| `GET /api/hist` | vergangene Partien |
+| `POST /api/hist` | Historie setzen |
 | `POST /api/state` | Spielstand setzen (Rumpf = Zustandsstring) |
 | `GET /api/events` | Server-Sent Events, schiebt jede Änderung sofort |
 | `POST /api/reset` | Spielstand leeren (alle Plätze frei) |

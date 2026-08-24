@@ -141,6 +141,10 @@ if "!CODE!"=="200" (
 
 echo.
 echo   Spielen:   http://%PLCHOST%/chess.html?plc
+echo.
+echo   Benoetigte Variablen auf der Steuerung:
+echo     gChessState : STRING[2000]
+echo     gChessHist  : STRING[2000]  ^(remanent, haelt die Partie-Historie^)
 echo   Im Browser mit Strg+F5 laden, sonst zeigt er den alten Stand.
 echo.
 pause

@@ -131,7 +131,16 @@
   .lobby .msg{min-height:18px; margin-top:12px; font-size:12px; color:var(--sel);}
   .btn.link{background:none; color:var(--text); opacity:.5; font-weight:400;
     font-size:12px; padding:6px;}
-  .histbox{margin-top:14px; text-align:left;}
+  .histbox{margin-top:8px; text-align:left; max-height:210px; overflow:auto;}
+  .histleer{font-size:12px; opacity:.4; padding:6px 2px;}
+  .histtabs{display:flex; gap:6px; margin-top:16px;}
+  .httab{flex:1; padding:7px 0; border-radius:7px; border:1px solid #4a505c;
+    background:#1c1f26; color:var(--text); font-size:12px; cursor:pointer;}
+  .httab.on{background:#3a3f4a; border-color:#6b7280;}
+  .histrow.rank{grid-template-columns:18px 1fr auto;}
+  .histrow.rank .hpos{opacity:.4; font-family:Consolas,monospace;}
+  .histrow.rank .hmeta{grid-column:2/4;}
+  .histrow.prov{opacity:.6;}
   .histttl{font-size:11px; letter-spacing:.06em; text-transform:uppercase;
     opacity:.5; margin-bottom:6px;}
   .histrow{display:grid; grid-template-columns:1fr auto; gap:1px 10px;
@@ -430,6 +439,10 @@
     <button class="btn sec" id="seatV">Nur zuschauen</button>
     <button class="btn sec" id="lobbyLeave" style="display:none">Platz freigeben</button>
     <div class="msg" id="lobbyMsg"></div>
+    <div class="histtabs">
+      <button class="httab on" data-tab="games">Partien</button>
+      <button class="httab" data-tab="board">Rangliste</button>
+    </div>
     <div class="histbox" id="lobbyHist"></div>
     <button class="btn link" id="resetSeats">Plätze zurücksetzen</button>
   </div>
@@ -3748,7 +3761,7 @@ let clock={w:0,b:0};                       // Restzeiten in ms
 let phase='setup';                         // setup | run | over
 let undoReq='';                            // 'w'/'b': dieser Spieler bittet um Rücknahme
 let hist=[];                               // vergangene Partien, neueste zuerst
-const HIST_MAX=6;                          // begrenzt, damit der String klein bleibt
+const HIST_MAX=40;                         // eigene Variable, daher grosszuegig
 let result='';                             // Ergebnistext bei phase==='over'
 
 const MAXSPECS=8;                          // Begrenzung, damit der String klein bleibt
@@ -3768,14 +3781,12 @@ function serializeState(){
            'tb='+Math.max(0,Math.round(clock.b)), 'st='+phase];
   if(result) f.push('res='+result.replace(/[;|]/g,''));
   if(undoReq) f.push('ur='+undoReq);
-  if(hist.length) f.push('h='+hist.map(e=>
-    [e.w,e.b,e.r,e.n,e.t].join('~')).join('!'));
   return f.join(';')+'|'+serializeGame();
 }
 function parseState(str){
   const s=String(str||''), i=s.indexOf('|');
   const out={w:'',b:'',nw:'',nb:'',specs:[],tc:'180+2',tw:0,tb:0,st:'setup',res:'',ur:'',
-             hist:[], moves:i<0?s.trim():s.slice(i+1).trim()};
+             moves:i<0?s.trim():s.slice(i+1).trim()};
   if(i<0) return out;                              // ganz altes Format: nur Züge
   const head=s.slice(0,i);
   if(head.indexOf('=')<0){                         // Vorversion: "<id-w>,<id-b>"
@@ -3793,11 +3804,6 @@ function parseState(str){
     else if(k==='st') out.st=v||'setup';
     else if(k==='res') out.res=clean0(v);
     else if(k==='ur') out.ur=v||'';
-    else if(k==='h'){ out.hist=v?v.split('!').filter(Boolean).map(e=>{
-      const c=e.split('~');
-      return {w:clean(c[0]),b:clean(c[1]),r:(c[2]||'').slice(0,1),
-              n:+c[3]||0,t:(c[4]||'').slice(0,8)};
-    }).slice(0,HIST_MAX):[]; }
   }
   return out;
 }
@@ -3817,13 +3823,12 @@ function applyState(st){
   const wasOver=(phase==='over');
   seats.w=st.w; seats.b=st.b; names.w=st.nw; names.b=st.nb;
   specs=st.specs; tc=st.tc; phase=st.st; result=st.res; undoReq=st.ur;
-  hist=st.hist;
   clock.w=st.tw; clock.b=st.tb; clockAt=Date.now();   // Basis fürs lokale Ticken
   if(st.moves!==serializeGame()) loadGame(st.moves);
   if(mySide==='w'&&seats.w!==myId) leaveSeat(true);        // Platz verloren
   else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
   render(); renderLobby(); syncLobby();   // Startet der Gegner, schließt die Lobby
-  if(!wasOver && phase==='over') runRecap();
+  if(!wasOver && phase==='over'){ runRecap(); refreshHist(true); }
 }
 window.ChessSync=Sync;             // Zugriffspunkt für externe Transports
 
@@ -3873,7 +3878,8 @@ function pushHistory(winner){
   hist.unshift({w:nm('w'), b:nm('b'), r:winner||'d', n:history.length,
                 t:Math.floor(Date.now()/60000).toString(36)});
   hist=hist.slice(0,HIST_MAX);
-  if(!Sync.transport) saveLocalHist();      // Hotseat hat keinen geteilten Zustand
+  if(Sync.transport) storeHist(); else saveLocalHist();
+  renderHist();
 }
 function saveLocalHist(){
   try{ localStorage.setItem('chessHist',JSON.stringify(hist)); }catch(e){}
@@ -3881,6 +3887,33 @@ function saveLocalHist(){
 function loadLocalHist(){
   try{ const v=localStorage.getItem('chessHist');
        if(v) hist=JSON.parse(v).slice(0,HIST_MAX); }catch(e){}
+}
+
+/* ---------- Historie in eigener Ablage ----------
+   Getrennt vom Spielstand: sie aendert sich nur am Partieende und darf
+   deshalb viel mehr Partien fassen. Gelesen wird sie nur, wenn sie
+   jemand sieht (Lobby, Auswertung) - nicht im Sekundentakt. */
+const Hist={ load:null, save:null, at:0 };
+function histToText(){ return hist.map(e=>[e.w,e.b,e.r,e.n,e.t].join('~')).join('!'); }
+function histFromText(v){
+  hist=(v||'').split('!').filter(Boolean).map(e=>{
+    const c=e.split('~');
+    return {w:clean(c[0]),b:clean(c[1]),r:(c[2]||'').slice(0,1),
+            n:+c[3]||0,t:(c[4]||'').slice(0,8)};
+  }).slice(0,HIST_MAX);
+}
+async function refreshHist(force){
+  if(!Hist.load) return;
+  const now=Date.now();
+  if(!force && now-Hist.at<5000) return;      // hoechstens alle 5 s nachsehen
+  Hist.at=now;
+  try{ const v=await Hist.load(); if(typeof v==='string'){ histFromText(v); renderHist(); } }
+  catch(e){}
+}
+async function storeHist(){
+  if(!Hist.save) return;
+  Hist.at=Date.now();
+  try{ await Hist.save(histToText()); }catch(e){}
 }
 function tickClocks(){
   if(!Sync.transport) return;
@@ -4360,7 +4393,7 @@ function showRecap(o){
   const box=document.getElementById('recap');
   if(!box) return;
   box.classList.add('on');
-  renderHist();
+  renderHist(); refreshHist();
   document.getElementById('recapTitle').textContent=result||'Partie beendet';
   const sub=document.getElementById('recapSub');
   const chart=document.getElementById('recapChart');
@@ -4429,11 +4462,46 @@ function histHtml(){
     '<span class="hr '+(e.r==='d'?'d':'')+'">'+score(e.r)+'</span>'+
     '<span class="hmeta">'+e.n+' Halbzüge · '+when(e.t)+'</span></div>').join('');
 }
+/* Rangliste: Punkte nach Schachart (Sieg 1, Remis 0,5), daraus die Quote */
+function leaderboard(){
+  const m=new Map();
+  const add=(name,pts)=>{
+    if(!name) return;
+    const s=m.get(name)||{n:0,pts:0,w:0,d:0,l:0};
+    s.n++; s.pts+=pts;
+    if(pts===1) s.w++; else if(pts===0.5) s.d++; else s.l++;
+    m.set(name,s);
+  };
+  for(const e of hist){
+    add(e.w, e.r==='w'?1:e.r==='d'?0.5:0);
+    add(e.b, e.r==='b'?1:e.r==='d'?0.5:0);
+  }
+  return [...m.entries()]
+    .map(([name,s])=>({name,...s,rate:s.n?s.pts/s.n*100:0}))
+    .sort((a,b)=>b.rate-a.rate || b.n-a.n || a.name.localeCompare(b.name));
+}
+function boardHtml(){
+  const rows=leaderboard();
+  if(!rows.length) return '';
+  return '<div class="histttl">Rangliste nach Siegquote</div>'+
+    rows.map((r,i)=>
+      '<div class="histrow rank'+(r.n<3?' prov':'')+'">'+
+      '<span class="hpos">'+(i+1)+'</span>'+
+      '<span class="hn">'+esc(r.name)+'</span>'+
+      '<span class="hr">'+r.rate.toFixed(0)+'%</span>'+
+      '<span class="hmeta">'+r.n+' Partien · '+r.w+'S '+r.d+'R '+r.l+'N'+
+      (r.n<3?' · noch wenige':'')+'</span></div>').join('');
+}
+let histTab='games';
 function renderHist(){
+  const html=(histTab==='board')?boardHtml():histHtml();
+  const leer=hist.length?'':'<div class="histleer">Noch keine Partien gespielt.</div>';
   for(const id of ['lobbyHist','recapHist']){
     const el=document.getElementById(id);
-    if(el) el.innerHTML=histHtml();
+    if(el) el.innerHTML=html||leer;
   }
+  for(const b of document.querySelectorAll('.httab'))
+    b.classList.toggle('on',b.dataset.tab===histTab);
 }
 function hideRecap(){ const b=document.getElementById('recap'); if(b) b.classList.remove('on'); }
 
@@ -4505,7 +4573,7 @@ const leaveBtn=document.getElementById('leaveBtn');
 let lobbyMsg='';
 
 function seatFree(col){ return !seats[col] || seats[col]===myId; }
-function showLobby(){ if(lobbyEl) lobbyEl.classList.add('on'); renderLobby(); }
+function showLobby(){ if(lobbyEl) lobbyEl.classList.add('on'); renderLobby(); refreshHist(); }
 function hideLobby(){ if(lobbyEl) lobbyEl.classList.remove('on'); }
 // Die Lobby bleibt offen, bis die Partie läuft: Spieler warten dort auf den
 // Gegner und stellen bis zum Start noch die Bedenkzeit ein.
@@ -4648,6 +4716,16 @@ function setupPLC(){
   Sync.transport={ send:write };
   Sync.ready=false;          // bis zum ersten Abgleich nichts überschreiben
 
+  // Historie in einer eigenen, remanenten Variable (Vorgabe gChessHist)
+  const hpv=params.get('hpv')||'gChessHist';
+  const hbody=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(hpv)+tail;
+  Hist.load=async()=>{
+    const r=await fetch(G,{method:'POST',body:hbody('&value=none&read=1')});
+    return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
+  };
+  Hist.save=(val)=>fetch(G,{method:'POST',
+    body:hbody('&value='+encodeURIComponent(val)+'&write=1')});
+
   const side=(params.get('side')||'').toLowerCase().charAt(0);
   applySide(); showLobby();
 
@@ -4675,6 +4753,8 @@ try{ const n=sessionStorage.getItem('chessName');
      if(n) document.getElementById('nameInput').value=n; }catch(e){}
 for(const btn of document.querySelectorAll('.tc'))
   btn.addEventListener('click',()=>setTC(btn.dataset.tc));
+for(const b of document.querySelectorAll('.httab'))
+  b.addEventListener('click',()=>{ histTab=b.dataset.tab; renderHist(); });
 document.getElementById('recapClose').addEventListener('click',hideRecap);
 document.getElementById('recapReview').addEventListener('click',startReview);
 document.getElementById('rvFirst').addEventListener('click',()=>reviewGo(0));
@@ -4720,6 +4800,10 @@ function setupServer(){
   Sync.transport={ send:(val)=>fetch(apiUrl('state'),
     {method:'POST',headers:{'Content-Type':'text/plain'},body:val}).catch(()=>{}) };
   Sync.ready=false;
+
+  Hist.load=async()=>(await (await fetch(apiUrl('hist'),{cache:'no-store'})).json()).s;
+  Hist.save=(val)=>fetch(apiUrl('hist'),
+    {method:'POST',headers:{'Content-Type':'text/plain'},body:val});
   applySide(); showLobby();
 
   function apply(txt){

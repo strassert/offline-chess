@@ -12,6 +12,7 @@ const PORT = +(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = path.resolve(process.env.ROOT || path.join(__dirname, '..'));
 const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'state.txt');
+const HIST_FILE = process.env.HIST_FILE || path.join(path.dirname(STATE_FILE), 'hist.txt');
 const MAX_STATE = 64 * 1024;              // Spielstand ist ein kurzer String
 
 const MIME = {
@@ -27,6 +28,7 @@ const MIME = {
 
 let state = '';
 let version = 0;
+let hist = '';                            // vergangene Partien, eigene Ablage
 const clients = new Set();                // offene SSE-Verbindungen
 
 /* ---------- Zustand ---------- */
@@ -34,6 +36,10 @@ try {
   state = fs.readFileSync(STATE_FILE, 'utf8');
   console.log('Spielstand geladen (' + state.length + ' Zeichen)');
 } catch (e) { /* erster Start: leer beginnen */ }
+try {
+  hist = fs.readFileSync(HIST_FILE, 'utf8');
+  console.log('Historie geladen (' + hist.length + ' Zeichen)');
+} catch (e) { /* noch keine Partien */ }
 
 let saveTimer = null;
 function persist() {                      // gebündelt schreiben, nicht bei jedem Zug
@@ -108,6 +114,23 @@ const server = http.createServer((req, res) => {
     res.writeHead(405); return res.end();
   }
 
+  // Die Historie aendert sich nur am Partieende - daher eigener Endpunkt
+  // und keine Uebertragung im Sekundentakt.
+  if (url === '/api/hist') {
+    if (req.method === 'GET') return sendJson(res, 200, { s: hist });
+    if (req.method === 'POST') {
+      return readBody(req, body => {
+        if (body === null) return sendJson(res, 413, { error: 'zu groß' });
+        hist = body;
+        fs.writeFile(HIST_FILE, hist, err => {
+          if (err) console.error('Historie speichern fehlgeschlagen:', err.message);
+        });
+        sendJson(res, 200, { ok: true });
+      });
+    }
+    res.writeHead(405); return res.end();
+  }
+
   if (url === '/api/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -142,11 +165,13 @@ server.listen(PORT, HOST, () => {
   console.log('Schach-Server auf http://' + HOST + ':' + PORT);
   console.log('Dateien aus ' + ROOT);
   console.log('Spielstand in ' + STATE_FILE);
+  console.log('Historie in ' + HIST_FILE);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     try { fs.writeFileSync(STATE_FILE, state); } catch (e) {}
+    try { fs.writeFileSync(HIST_FILE, hist); } catch (e) {}
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
   });
