@@ -3729,7 +3729,7 @@ function undoDecline(){
    im Panel - und die Möglichkeit, von Hand neu aufzusetzen. */
 const Net={
   mode:'',                     // 'Steuerung' oder 'Server'
-  lastOk:0, lastTry:0, rtt:0, avg:0,
+  lastOk:0, lastTry:0, rtt:0, avg:0, queued:0,
   okR:0, badR:0, okW:0, badW:0,
   reconnect:null,              // vom Transport gesetzt
   readOk(ms){ this.okR++; this.lastOk=Date.now(); this.rtt=ms;
@@ -3743,6 +3743,9 @@ const Net={
     const age=Date.now()-this.lastOk;
     if(age>30000||Sync.fails>=6) return 'down';
     if(age>8000||Sync.fails>=2) return 'weak';
+    /* Lesen kann laufen, während Schreiben scheitert - dann steht der eigene
+       Zug nur hier und die Verbindung ist eben nicht in Ordnung. */
+    if(this.queued && Date.now()-this.queued>6000) return 'weak';
     return 'ok';
   }
 };
@@ -3765,9 +3768,13 @@ function renderNet(){
                   : st==='weak' ? 'Gestört'
                   :               'Getrennt';
   const bits=[];
+  const wait=Net.queued&&Date.now()-Net.queued>2000;
   if(Net.avg) bits.push(Net.avg+' ms');
-  if(Net.lastOk) bits.push('Abgleich '+fmtAge(Date.now()-Net.lastOk));
-  if(st!=='ok'&&Sync.fails) bits.push(Sync.fails+' Fehlversuche');
+  // Ein noch nicht bestätigter eigener Zug ist die wichtigere Auskunft
+  if(!wait&&Net.lastOk) bits.push('Abgleich '+fmtAge(Date.now()-Net.lastOk));
+  if(st!=='ok'&&Sync.fails)
+    bits.push(Sync.fails+(Sync.fails===1?' Fehlversuch':' Fehlversuche'));
+  if(wait) bits.push('Zug wird übertragen …');
   sub.textContent=bits.join(' · ');
   box.title=Net.mode+'  gelesen '+Net.okR+' ok / '+Net.badR+' Fehler'+
             '\ngeschrieben '+Net.okW+' ok / '+Net.badW+' Fehler'+
@@ -3887,6 +3894,10 @@ function parseState(str){
 }
 const Sync={
   transport:null, suppress:false, last:null, fails:0,
+  oldAt:0,                       // wann zuletzt gegen einen veralteten Stand gesendet
+  // Antwort auf einen veralteten Stand: den eigenen anbieten, aber mit Abstand
+  again(){ if(Date.now()-this.oldAt<2000) return;
+           this.oldAt=Date.now(); this.publish(); },
   ready:true,                    // erst nach dem ersten Abgleich darf publiziert werden
   publish(){ if(!this.transport||this.suppress) return;
              const s=serializeState();
@@ -3911,6 +3922,34 @@ function acceptState(txt){
   if(txt.indexOf('<')>=0) return false;                 // Fehlerseite
   if(!txt.trim()) return !(phase==='run'&&history.length); // leer nur ausserhalb der Partie
   return txt.indexOf('|')>=0 || txt.indexOf('=')>=0;    // sieht nach unserem Format aus
+}
+/* Ein empfangener Stand kann älter sein als der eigene: Schreibt die
+   Gegenseite mit veralteter Sicht, fehlt darin unser letzter Zug. Ihn zu
+   übernehmen hieße, den eigenen Zug wieder zu verlieren - stattdessen wird
+   der eigene Stand erneut angeboten. Erkennbar ist das daran, dass die
+   empfangene Zugliste ein Anfangsstück der eigenen ist. */
+function outdated(txt){
+  if(phase!=='run'||undoReq) return false;   // Rücknahme darf verkürzen
+  const rem=parseState(txt);
+  if(rem.st!=='run') return false;           // Ende oder Neustart sind gewollt
+  const g=serializeGame();
+  /* Nur ein echtes Anfangsstück gilt als veraltet. Weichen die Zuglisten
+     dagegen voneinander ab, hat die Gegenseite etwas anderes gespielt - dann
+     wird ihr Stand übernommen, denn ein gemeinsames Brett zählt mehr. Ein Patt
+     zwischen zwei Clients kann daraus nicht entstehen: Von zwei Ständen ist
+     immer höchstens einer das Anfangsstück des anderen. */
+  return g.length>rem.moves.length && g.indexOf(rem.moves)===0;
+}
+/* Gegenprobe in Ruhe: Steht drüben wirklich, was hier steht? Ging ein
+   Schreibvorgang verloren - abgebrochen, überschrieben, nie bestätigt -,
+   fällt es hier auf und der eigene Stand geht noch einmal raus. */
+function reconcile(){
+  if(!Sync.transport||!Sync.ready||Sync.suppress) return;
+  if(mySide!=='w'&&mySide!=='b') return;
+  const rem=parseState(Sync.last||'');
+  const g=serializeGame();
+  const ahead=g.length>rem.moves.length && g.indexOf(rem.moves)===0;
+  if(ahead || rem[mySide]!==myId || (phase==='over'&&rem.st!=='over')) Sync.publish();
 }
 // Übernimmt einen empfangenen Zustand vollständig
 function applyState(st){
@@ -3989,6 +4028,15 @@ function saveLocalHist(){
 function loadLocalHist(){
   try{ const v=localStorage.getItem('chessHist');
        if(v) hist=JSON.parse(v).slice(0,HIST_MAX); }catch(e){}
+}
+
+/* Jeder Zugriff braucht eine Zeitgrenze - ohne sie kann ein hängender
+   Aufruf für immer offen bleiben und den Ablauf blockieren. */
+function fetchT(url,opt,ms){
+  const ac=new AbortController();
+  const t=setTimeout(()=>ac.abort(),ms||6000);
+  return fetch(url,Object.assign({signal:ac.signal},opt||{}))
+    .finally(()=>clearTimeout(t));
 }
 
 /* ---------- Historie in eigener Ablage ----------
@@ -4826,30 +4874,31 @@ function setupPLC(){
   const body=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(pv)+tail;
   // Ohne Zeitgrenze kann ein hängender Zugriff die Abfrage dauerhaft blockieren
   function post(data,ms){
-    const ac=new AbortController();
-    const t=setTimeout(()=>ac.abort(),ms);
-    return fetch(G,{method:'POST',body:data,signal:ac.signal})
-      .finally(()=>clearTimeout(t));
+    return fetchT(G,{method:'POST',body:data},ms);
   }
-  /* Schreiben mit Wiederholung: Der zuletzt gewollte Stand bleibt vorgemerkt,
-     bis die Steuerung ihn bestätigt. Solange etwas aussteht, wird kein
-     empfangener Stand übernommen - er wäre älter als das, was wir senden. */
+  /* Schreiben mit Wiederholung: Solange etwas aussteht, wird kein empfangener
+     Stand übernommen - er wäre älter als das, was wir senden. Gesendet wird
+     dabei immer der JETZIGE Stand, nicht der beim Vormerken eingefrorene:
+     Nach einer längeren Störung wäre der alte Schnappschuss ein Rückschritt. */
   let pending=null, sending=false, retry=null, pendingSince=0;
+  let stamp=0, sendingSince=0;
   // Der eigene Stand hat Vorrang - aber nur begrenzt. Klappt das Schreiben
   // laenger nicht, ist ein gemeinsamer Stand wichtiger als der eigene Zug.
   const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
   async function flush(){
     if(sending||pending===null) return;
-    sending=true;
-    const val=pending;
+    sending=true; sendingSince=Date.now();
+    const at=stamp;
+    let val; try{ val=serializeState(); }catch(e){ val=pending; }
     try{
       const r=await post(body('&value='+encodeURIComponent(val)+'&write=1'),6000);
       if(!r.ok) throw new Error('Schreiben '+r.status);
-      if(pending===val) pending=null;         // erfolgreich übertragen
+      if(stamp===at) pending=null;            // nichts Neues dazugekommen
       Sync.last=val; Sync.fails=0; Net.writeOk();
     }catch(e){ Sync.fails++; Net.writeFail(); }
     finally{
       sending=false;
+      Net.queued=pending===null?0:pendingSince;
       try{ renderWarn(); }catch(e){}           // Anzeige darf nichts blockieren
       if(pending!==null){                      // erneut versuchen, mit Abstand
         clearTimeout(retry);
@@ -4857,7 +4906,10 @@ function setupPLC(){
       }
     }
   }
-  function write(val){ if(pending===null) pendingSince=Date.now(); pending=val; flush(); }
+  function write(val){
+    if(pending===null){ pendingSince=Date.now(); Net.queued=pendingSince; }
+    pending=val; stamp++; flush();
+  }
   async function read(){
     const t0=Date.now();
     let r;
@@ -4876,13 +4928,13 @@ function setupPLC(){
   const hpv=params.get('hpv')||'gChessHist';
   const hbody=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(hpv)+tail;
   Hist.load=async()=>{
-    const r=await fetch(G,{method:'POST',body:hbody('&value=none&read=1')});
+    const r=await fetchT(G,{method:'POST',body:hbody('&value=none&read=1')},6000);
     if(!r.ok) throw new Error('Lesen '+r.status);     // Variable fehlt -> 400
     return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
   };
   Hist.save=async(val)=>{
-    const r=await fetch(G,{method:'POST',
-      body:hbody('&value='+encodeURIComponent(val)+'&write=1')});
+    const r=await fetchT(G,{method:'POST',
+      body:hbody('&value='+encodeURIComponent(val)+'&write=1')},6000);
     if(!r.ok) throw new Error('Schreiben '+r.status);
   };
   Hist.name=hpv;
@@ -4890,10 +4942,10 @@ function setupPLC(){
   const side=(params.get('side')||'').toLowerCase().charAt(0);
   applySide(); showLobby();
 
-  let busy=false;
+  let busy=false, busySince=0;
   async function poll(){
     if(busy) return;
-    busy=true;
+    busy=true; busySince=Date.now();
     try{
       const remote=await read();
       Sync.fails=0;
@@ -4901,7 +4953,9 @@ function setupPLC(){
          verhindert ein Fehler in der Darstellung dauerhaft, dass Züge des Gegners
          ankommen - die Abfrage liefe weiter, das Spiel bliebe trotzdem stehen. */
       if(!holdsBack() && acceptState(remote)){
-        if(!Sync.ready){
+        if(Sync.ready && outdated(remote)){
+          Sync.again();                     // drüben steht ein älterer Stand
+        } else if(!Sync.ready){
           Sync.last=remote;
           applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
           Sync.ready=true;
@@ -4931,10 +4985,16 @@ function setupPLC(){
   loop();
   /* Wachhund: läuft unabhängig von der Kette. Bleibt die Abfrage trotz allem
      stehen - hängender Zugriff, verlorener Zeitgeber, angehaltener Tab -,
-     startet er sie neu und schiebt einen ausstehenden Schreibvorgang an. */
+     startet er sie neu und schiebt einen ausstehenden Schreibvorgang an.
+     Die Sperren busy/sending werden dabei notfalls von Hand gelöst: bleibt
+     ein Zugriff wider Erwarten offen, wäre der Abgleich sonst für immer aus. */
   setInterval(()=>{
-    if(!busy && Date.now()-lastTry>8000){ clearTimeout(timer); loop(); }
+    const now=Date.now();
+    if(busy && now-busySince>15000) busy=false;
+    if(sending && now-sendingSince>15000) sending=false;
+    if(!busy && now-lastTry>8000){ clearTimeout(timer); loop(); }
     if(pending!==null && !sending) flush();
+    try{ reconcile(); }catch(e){}
   },5000);
   setInterval(renderNet,1000);              // Alter des letzten Abgleichs mitzählen
   Net.mode='Steuerung';
@@ -4962,6 +5022,8 @@ document.getElementById('netBtn').addEventListener('click',(e)=>{
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && Net.reconnect) Net.reconnect();
 });
+// Zurück aus dem Seiten-Zwischenspeicher (Zurück-Taste, ausgelagerter Tab)
+window.addEventListener('pageshow',(e)=>{ if(e.persisted && Net.reconnect) Net.reconnect(); });
 window.addEventListener('online',()=>{ if(Net.reconnect) Net.reconnect(); });
 window.addEventListener('offline',()=>{ Sync.fails+=3; renderNet(); });
 
@@ -5010,39 +5072,41 @@ function setupServer(){
   // Wie beim PLC-Transport: erst bestätigt gilt als übertragen, mit
   // Zeitgrenze und Wiederholung.
   let pending=null, sending=false, retry=null, pendingSince=0;
+  let stamp=0, sendingSince=0;
   const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
   async function flush(){
     if(sending||pending===null) return;
-    sending=true;
-    const val=pending;
+    sending=true; sendingSince=Date.now();
+    const at=stamp;
+    let val; try{ val=serializeState(); }catch(e){ val=pending; }
     try{
-      const ac=new AbortController();
-      const t=setTimeout(()=>ac.abort(),6000);
-      const r=await fetch(apiUrl('state'),{method:'POST',
-        headers:{'Content-Type':'text/plain'},body:val,signal:ac.signal})
-        .finally(()=>clearTimeout(t));
+      const r=await fetchT(apiUrl('state'),{method:'POST',
+        headers:{'Content-Type':'text/plain'},body:val},6000);
       if(!r.ok) throw new Error('Schreiben '+r.status);
-      if(pending===val) pending=null;
+      if(stamp===at) pending=null;
       Sync.last=val; Sync.fails=0; Net.writeOk();
     }catch(e){ Sync.fails++; Net.writeFail(); }
-    sending=false; renderWarn();
+    sending=false;
+    Net.queued=pending===null?0:pendingSince;
+    try{ renderWarn(); }catch(e){}
     if(pending!==null){
       clearTimeout(retry);
       retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
     }
   }
-  Sync.transport={ send:(val)=>{ if(pending===null) pendingSince=Date.now();
-                                 pending=val; flush(); }, confirms:true };
+  Sync.transport={ send:(val)=>{
+      if(pending===null){ pendingSince=Date.now(); Net.queued=pendingSince; }
+      pending=val; stamp++; flush(); }, confirms:true };
   Sync.ready=false;
 
   Hist.load=async()=>{
-    const r=await fetch(apiUrl('hist'),{cache:'no-store'});
+    const r=await fetchT(apiUrl('hist'),{cache:'no-store'},6000);
     if(!r.ok) throw new Error('Lesen '+r.status);
     return (await r.json()).s;
   };
   Hist.save=async(val)=>{
-    const r=await fetch(apiUrl('hist'),
-      {method:'POST',headers:{'Content-Type':'text/plain'},body:val});
+    const r=await fetchT(apiUrl('hist'),
+      {method:'POST',headers:{'Content-Type':'text/plain'},body:val},6000);
     if(!r.ok) throw new Error('Schreiben '+r.status);
   };
   applySide(); showLobby();
@@ -5050,31 +5114,33 @@ function setupServer(){
   function apply(txt){
     if(holdsBack()) return;                 // eigener Stand noch nicht bestätigt
     if(!acceptState(txt)) return;
+    if(Sync.ready && outdated(txt)){ Sync.again(); return; }
     if(!Sync.ready){                       // erster Stand: alles übernehmen
       Sync.last=txt; applyState(parseState(txt));
       Sync.ready=true; renderLobby();
     } else if(txt!==Sync.last){ Sync.receive(txt); }
   }
-  let live=false, es=null;
+  let live=false, es=null, lastEvt=0, reopen=null;
   function openStream(){
     if(!Api.sse) return;
+    clearTimeout(reopen);
     try{ if(es) es.close(); }catch(e){}
+    lastEvt=Date.now();
     try{
       es=new EventSource(apiUrl('events'));
-      es.onmessage=(e)=>{ live=true; Net.readOk(Net.avg||20);
+      es.onmessage=(e)=>{ live=true; lastEvt=Date.now(); Net.readOk(Net.avg||20);
                           try{ apply(JSON.parse(e.data).s); }catch(err){} };
-      es.onerror=()=>{ live=false; };      // Abfragen springt dann ein
+      // Abfragen springt ein, der Strom wird in Ruhe neu aufgebaut
+      es.onerror=()=>{ live=false;
+                       clearTimeout(reopen); reopen=setTimeout(openStream,5000); };
     }catch(e){}
   }
   openStream();
   async function poll(){
     if(live&&Sync.ready) return;
     try{
-      const ac=new AbortController();
-      const t=setTimeout(()=>ac.abort(),4000);
       const t0=Date.now();
-      const r=await fetch(apiUrl('state'),{cache:'no-store',signal:ac.signal})
-        .finally(()=>clearTimeout(t));
+      const r=await fetchT(apiUrl('state'),{cache:'no-store'},4000);
       if(!r.ok) throw new Error('Lesen '+r.status);
       apply((await r.json()).s);
       Sync.fails=0; Net.readOk(Date.now()-t0);
@@ -5084,8 +5150,15 @@ function setupServer(){
   const tick=()=>{ try{ poll().catch(()=>{}); }catch(e){} };
   tick();
   setInterval(tick,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
-  // Ausstehenden Schreibvorgang nicht liegen lassen
-  setInterval(()=>{ if(pending!==null && !sending) flush(); },5000);
+  /* Wachhund wie beim Steuerungsbetrieb: hängende Sperre lösen, den still
+     gewordenen Ereignisstrom neu aufbauen (der Server meldet sich alle 25 s)
+     und den eigenen Stand gegenprüfen. */
+  setInterval(()=>{
+    if(sending && Date.now()-sendingSince>15000) sending=false;
+    if(pending!==null && !sending) flush();
+    if(Api.sse && Date.now()-lastEvt>40000){ live=false; openStream(); }
+    try{ reconcile(); }catch(e){}
+  },5000);
   setInterval(renderNet,1000);
   Net.mode='Server';
   Net.reconnect=()=>{
