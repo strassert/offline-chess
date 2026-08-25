@@ -134,6 +134,8 @@
     font-size:12px; padding:6px;}
   .histbox{margin-top:8px; text-align:left; max-height:210px; overflow:auto;}
   .histleer{font-size:12px; opacity:.4; padding:6px 2px;}
+  .syncwarn{margin-top:8px; font-size:11px; line-height:1.4; color:var(--check);
+    background:#2f1f1f; border-radius:6px; padding:7px 8px;}
   .histwarn{font-size:11px; line-height:1.4; color:var(--sel); background:#2f2a1c;
     border-radius:6px; padding:7px 8px; margin-bottom:8px;}
   .histtabs{display:flex; gap:6px; margin-top:16px;}
@@ -385,6 +387,7 @@
     <button class="btn sec" id="undoBtn">Zug zurück</button>
     <button class="btn sec" id="flipBtn">Brett drehen</button>
     <button class="btn sec" id="leaveBtn" style="display:none">Platz freigeben</button>
+    <div class="syncwarn" id="syncWarn" style="display:none"></div>
     <div class="undoask" id="undoAsk" style="display:none">
       <div class="txt" id="undoTxt"></div>
       <div class="row">
@@ -3702,6 +3705,16 @@ function undoDecline(){
   undoReq=''; Sync.publish(); render(); renderUndo();
 }
 // Anzeige der offenen Rücknahme-Bitte
+/* Bei anhaltenden Zugriffsfehlern sagen, was los ist, statt still zu
+   verharren - der Spielstand liegt dann nur noch lokal vor. */
+function renderWarn(){
+  const el=document.getElementById('syncWarn');
+  if(!el) return;
+  const bad=Sync.fails>=3;
+  el.style.display=bad?'block':'none';
+  if(bad) el.textContent='Steuerung antwortet nicht ('+Sync.fails+' Versuche). '+
+    'Die Partie läuft lokal weiter, wird aber gerade nicht übertragen.';
+}
 function renderUndo(){
   const box=document.getElementById('undoAsk');
   const btn=document.getElementById('undoBtn');
@@ -3812,7 +3825,7 @@ function parseState(str){
   return out;
 }
 const Sync={
-  transport:null, suppress:false, last:null,
+  transport:null, suppress:false, last:null, fails:0,
   ready:true,                    // erst nach dem ersten Abgleich darf publiziert werden
   publish(){ if(this.transport&&!this.suppress){ const s=serializeState();
              this.last=s; this.transport.send(s); } },
@@ -3822,6 +3835,17 @@ const Sync={
     applyState(parseState(str));
   }
 };
+/* Nicht jede Antwort ist ein Spielstand: Der Webserver der Steuerung
+   schickt bei einem Fehler eine HTML-Seite, und ein abgebrochener Zugriff
+   liefert gar nichts. Solche Antworten dürfen die laufende Partie nicht
+   ersetzen - sonst wirken die Plätze plötzlich unbesetzt und der Client
+   wirft sich selbst zurück in die Lobby. */
+function acceptState(txt){
+  if(typeof txt!=='string') return false;
+  if(txt.indexOf('<')>=0) return false;                 // Fehlerseite
+  if(!txt.trim()) return !(phase==='run'&&history.length); // leer nur ausserhalb der Partie
+  return txt.indexOf('|')>=0 || txt.indexOf('=')>=0;    // sieht nach unserem Format aus
+}
 // Übernimmt einen empfangenen Zustand vollständig
 function applyState(st){
   const wasOver=(phase==='over');
@@ -3829,8 +3853,16 @@ function applyState(st){
   specs=st.specs; tc=st.tc; phase=st.st; result=st.res; undoReq=st.ur;
   clock.w=st.tw; clock.b=st.tb; clockAt=Date.now();   // Basis fürs lokale Ticken
   if(st.moves!==serializeGame()) loadGame(st.moves);
-  if(mySide==='w'&&seats.w!==myId) leaveSeat(true);        // Platz verloren
-  else if(mySide==='b'&&seats.b!==myId) leaveSeat(true);
+  /* Platz nur aufgeben, wenn dort tatsächlich jemand anderes sitzt. Ist er
+     bloß leer, hat der andere Client mit veralteter Sicht veröffentlicht -
+     dann tragen wir uns einfach wieder ein, statt die Partie zu verlassen. */
+  for(const col of ['w','b']){
+    if(mySide!==col) continue;
+    if(seats[col]===myId) break;
+    if(seats[col]){ leaveSeat(true); break; }             // fremd besetzt
+    seats[col]=myId; names[col]=myName()||names[col];     // Platz zurückholen
+    Sync.publish();
+  }
   render(); renderLobby(); syncLobby();   // Startet der Gegner, schließt die Lobby
   if(!wasOver && phase==='over'){ runRecap(); refreshHist(true); }
 }
@@ -4727,12 +4759,19 @@ function setupPLC(){
   const G='/goform/ReadWrite';
   const body=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(pv)+tail;
   async function write(val){
-    try{ await fetch(G,{method:'POST',body:body('&value='+encodeURIComponent(val)+'&write=1')}); }
-    catch(e){/* Netzwerk-Hänger ignorieren, Spiel läuft lokal weiter */}
+    try{
+      const r=await fetch(G,{method:'POST',
+        body:body('&value='+encodeURIComponent(val)+'&write=1')});
+      Sync.fails=r.ok?0:Sync.fails+1;
+    }catch(e){ Sync.fails++; }                 // Spiel läuft lokal weiter
+    renderWarn();
   }
   async function read(){
     const r=await fetch(G,{method:'POST',body:body('&value=none&read=1')});
-    return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
+    if(!r.ok) throw new Error('Lesen '+r.status);
+    const t=(await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
+    if(t.indexOf('<')>=0) throw new Error('Antwort ist keine Variable');
+    return t;
   }
   Sync.transport={ send:write };
   Sync.ready=false;          // bis zum ersten Abgleich nichts überschreiben
@@ -4760,6 +4799,8 @@ function setupPLC(){
     if(busy) return; busy=true;
     try{
       const remote=await read();
+      Sync.fails=0; renderWarn();
+      if(!acceptState(remote)) return;
       const first=!Sync.ready;
       if(first){ Sync.last=remote;
                  applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
@@ -4768,7 +4809,7 @@ function setupPLC(){
                  if(side==='w'||side==='b') takeSeat(side);
                  else if(side==='v') watchOnly();
       } else if(remote!==Sync.last){ Sync.receive(remote); }
-    }catch(e){}
+    }catch(e){ Sync.fails++; renderWarn(); }
     busy=false;
   }
   poll();                    // aktuellen Stand von der PLC übernehmen
@@ -4840,7 +4881,7 @@ function setupServer(){
   applySide(); showLobby();
 
   function apply(txt){
-    if(typeof txt!=='string') return;
+    if(!acceptState(txt)) return;
     if(!Sync.ready){                       // erster Stand: alles übernehmen
       Sync.last=txt; applyState(parseState(txt));
       Sync.ready=true; renderLobby();
@@ -4857,7 +4898,10 @@ function setupServer(){
   async function poll(){
     if(live&&Sync.ready) return;
     try{ const r=await fetch(apiUrl('state'),{cache:'no-store'});
-         apply((await r.json()).s); }catch(e){}
+         if(!r.ok) throw new Error('Lesen '+r.status);
+         apply((await r.json()).s);
+         Sync.fails=0; renderWarn();
+    }catch(e){ Sync.fails++; renderWarn(); }
   }
   poll();
   setInterval(poll,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
