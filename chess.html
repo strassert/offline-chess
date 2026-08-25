@@ -3827,8 +3827,13 @@ function parseState(str){
 const Sync={
   transport:null, suppress:false, last:null, fails:0,
   ready:true,                    // erst nach dem ersten Abgleich darf publiziert werden
-  publish(){ if(this.transport&&!this.suppress){ const s=serializeState();
-             this.last=s; this.transport.send(s); } },
+  publish(){ if(!this.transport||this.suppress) return;
+             const s=serializeState();
+             // Transporte mit Bestätigung setzen 'last' erst nach dem Schreiben -
+             // sonst gilt ein fehlgeschlagener Zug als übertragen und die nächste
+             // Abfrage macht ihn mit dem alten Stand wieder rückgängig.
+             if(!this.transport.confirms) this.last=s;
+             this.transport.send(s); },
   receive(str){
     if(str===this.last) return;                   // eigener Echo -> ignorieren
     this.last=str;
@@ -4758,22 +4763,45 @@ function setupPLC(){
   const pv=params.get('pv')||'gChessState';
   const G='/goform/ReadWrite';
   const body=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(pv)+tail;
-  async function write(val){
-    try{
-      const r=await fetch(G,{method:'POST',
-        body:body('&value='+encodeURIComponent(val)+'&write=1')});
-      Sync.fails=r.ok?0:Sync.fails+1;
-    }catch(e){ Sync.fails++; }                 // Spiel läuft lokal weiter
-    renderWarn();
+  // Ohne Zeitgrenze kann ein hängender Zugriff die Abfrage dauerhaft blockieren
+  function post(data,ms){
+    const ac=new AbortController();
+    const t=setTimeout(()=>ac.abort(),ms);
+    return fetch(G,{method:'POST',body:data,signal:ac.signal})
+      .finally(()=>clearTimeout(t));
   }
+  /* Schreiben mit Wiederholung: Der zuletzt gewollte Stand bleibt vorgemerkt,
+     bis die Steuerung ihn bestätigt. Solange etwas aussteht, wird kein
+     empfangener Stand übernommen - er wäre älter als das, was wir senden. */
+  let pending=null, sending=false, retry=null, pendingSince=0;
+  // Der eigene Stand hat Vorrang - aber nur begrenzt. Klappt das Schreiben
+  // laenger nicht, ist ein gemeinsamer Stand wichtiger als der eigene Zug.
+  const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
+  async function flush(){
+    if(sending||pending===null) return;
+    sending=true;
+    const val=pending;
+    try{
+      const r=await post(body('&value='+encodeURIComponent(val)+'&write=1'),6000);
+      if(!r.ok) throw new Error('Schreiben '+r.status);
+      if(pending===val) pending=null;         // erfolgreich übertragen
+      Sync.last=val; Sync.fails=0;
+    }catch(e){ Sync.fails++; }
+    sending=false; renderWarn();
+    if(pending!==null){                        // erneut versuchen, mit Abstand
+      clearTimeout(retry);
+      retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
+    }
+  }
+  function write(val){ if(pending===null) pendingSince=Date.now(); pending=val; flush(); }
   async function read(){
-    const r=await fetch(G,{method:'POST',body:body('&value=none&read=1')});
+    const r=await post(body('&value=none&read=1'),4000);
     if(!r.ok) throw new Error('Lesen '+r.status);
     const t=(await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
     if(t.indexOf('<')>=0) throw new Error('Antwort ist keine Variable');
     return t;
   }
-  Sync.transport={ send:write };
+  Sync.transport={ send:write, confirms:true };
   Sync.ready=false;          // bis zum ersten Abgleich nichts überschreiben
 
   // Historie in einer eigenen, remanenten Variable (Vorgabe gChessHist)
@@ -4796,24 +4824,33 @@ function setupPLC(){
 
   let busy=false;
   async function poll(){
-    if(busy) return; busy=true;
+    if(busy) return;
+    busy=true;
     try{
       const remote=await read();
       Sync.fails=0; renderWarn();
-      if(!acceptState(remote)) return;
-      const first=!Sync.ready;
-      if(first){ Sync.last=remote;
-                 applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
-                 Sync.ready=true; renderLobby();
-                 // Platz aus der URL erst jetzt belegen – Stand ist bekannt
-                 if(side==='w'||side==='b') takeSeat(side);
-                 else if(side==='v') watchOnly();
-      } else if(remote!==Sync.last){ Sync.receive(remote); }
+      // Eigener Stand noch nicht bestätigt? Dann nichts übernehmen.
+      if(!holdsBack() && acceptState(remote)){
+        if(!Sync.ready){
+          Sync.last=remote;
+          applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
+          Sync.ready=true; renderLobby();
+          // Platz aus der URL erst jetzt belegen – Stand ist bekannt
+          if(side==='w'||side==='b') takeSeat(side);
+          else if(side==='v') watchOnly();
+        } else if(remote!==Sync.last){ Sync.receive(remote); }
+      }
     }catch(e){ Sync.fails++; renderWarn(); }
-    busy=false;
+    finally{ busy=false; }                  // sonst bliebe die Abfrage stehen
   }
-  poll();                    // aktuellen Stand von der PLC übernehmen
-  setInterval(poll,1000);    // danach ~1x pro Sekunde abgleichen
+  // Bei Störungen etwas Abstand halten, statt die Steuerung weiter zu bedrängen
+  function loop(){
+    poll().then(()=>{
+      const wait=Sync.fails?Math.min(5000,1000*Math.pow(2,Math.min(Sync.fails,3))):1000;
+      setTimeout(loop,wait);
+    });
+  }
+  loop();
 }
 
 try{ const n=sessionStorage.getItem('chessName');
@@ -4864,8 +4901,32 @@ async function detectApi(){
 }
 
 function setupServer(){
-  Sync.transport={ send:(val)=>fetch(apiUrl('state'),
-    {method:'POST',headers:{'Content-Type':'text/plain'},body:val}).catch(()=>{}) };
+  // Wie beim PLC-Transport: erst bestätigt gilt als übertragen, mit
+  // Zeitgrenze und Wiederholung.
+  let pending=null, sending=false, retry=null, pendingSince=0;
+  const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
+  async function flush(){
+    if(sending||pending===null) return;
+    sending=true;
+    const val=pending;
+    try{
+      const ac=new AbortController();
+      const t=setTimeout(()=>ac.abort(),6000);
+      const r=await fetch(apiUrl('state'),{method:'POST',
+        headers:{'Content-Type':'text/plain'},body:val,signal:ac.signal})
+        .finally(()=>clearTimeout(t));
+      if(!r.ok) throw new Error('Schreiben '+r.status);
+      if(pending===val) pending=null;
+      Sync.last=val; Sync.fails=0;
+    }catch(e){ Sync.fails++; }
+    sending=false; renderWarn();
+    if(pending!==null){
+      clearTimeout(retry);
+      retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
+    }
+  }
+  Sync.transport={ send:(val)=>{ if(pending===null) pendingSince=Date.now();
+                                 pending=val; flush(); }, confirms:true };
   Sync.ready=false;
 
   Hist.load=async()=>{
@@ -4881,6 +4942,7 @@ function setupServer(){
   applySide(); showLobby();
 
   function apply(txt){
+    if(holdsBack()) return;                 // eigener Stand noch nicht bestätigt
     if(!acceptState(txt)) return;
     if(!Sync.ready){                       // erster Stand: alles übernehmen
       Sync.last=txt; applyState(parseState(txt));
@@ -4897,10 +4959,14 @@ function setupServer(){
   }
   async function poll(){
     if(live&&Sync.ready) return;
-    try{ const r=await fetch(apiUrl('state'),{cache:'no-store'});
-         if(!r.ok) throw new Error('Lesen '+r.status);
-         apply((await r.json()).s);
-         Sync.fails=0; renderWarn();
+    try{
+      const ac=new AbortController();
+      const t=setTimeout(()=>ac.abort(),4000);
+      const r=await fetch(apiUrl('state'),{cache:'no-store',signal:ac.signal})
+        .finally(()=>clearTimeout(t));
+      if(!r.ok) throw new Error('Lesen '+r.status);
+      apply((await r.json()).s);
+      Sync.fails=0; renderWarn();
     }catch(e){ Sync.fails++; renderWarn(); }
   }
   poll();
