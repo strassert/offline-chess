@@ -134,8 +134,19 @@
     font-size:12px; padding:6px;}
   .histbox{margin-top:8px; text-align:left; max-height:210px; overflow:auto;}
   .histleer{font-size:12px; opacity:.4; padding:6px 2px;}
-  .syncwarn{margin-top:8px; font-size:11px; line-height:1.4; color:var(--check);
-    background:#2f1f1f; border-radius:6px; padding:7px 8px;}
+  .netbox{margin-top:10px; background:#1c1f26; border-radius:8px; padding:7px 9px;
+    cursor:default;}
+  .netline{display:flex; align-items:center; gap:7px;}
+  .netdot{width:9px; height:9px; border-radius:50%; background:#6b7280; flex:0 0 auto;}
+  .netdot.ok{background:#7fd88f;} .netdot.weak{background:#f0c14b;}
+  .netdot.down{background:#ff6b6b;} .netdot.init{background:#6b7280;}
+  .nettxt{flex:1; font-size:12px; font-weight:600;}
+  .netbtn{background:none; border:0; color:var(--text); opacity:.5; cursor:pointer;
+    font-size:15px; line-height:1; padding:2px 4px; border-radius:5px;}
+  .netbtn:hover{opacity:1; background:#3a3f4a;}
+  .netbtn.busy{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .netsub{font-size:11px; opacity:.5; margin-top:3px; min-height:14px;}
   .histwarn{font-size:11px; line-height:1.4; color:var(--sel); background:#2f2a1c;
     border-radius:6px; padding:7px 8px; margin-bottom:8px;}
   .histtabs{display:flex; gap:6px; margin-top:16px;}
@@ -387,7 +398,7 @@
     <button class="btn sec" id="undoBtn">Zug zurück</button>
     <button class="btn sec" id="flipBtn">Brett drehen</button>
     <button class="btn sec" id="leaveBtn" style="display:none">Platz freigeben</button>
-    <div class="syncwarn" id="syncWarn" style="display:none"></div>
+
     <div class="undoask" id="undoAsk" style="display:none">
       <div class="txt" id="undoTxt"></div>
       <div class="row">
@@ -404,6 +415,14 @@
     </div>
     <div class="specs" id="specs"></div>
     <div class="moves" id="moves"></div>
+    <div class="netbox" id="netBox" style="display:none">
+      <div class="netline">
+        <span class="netdot" id="netDot"></span>
+        <span class="nettxt" id="netTxt">Verbinde …</span>
+        <button class="netbtn" id="netBtn" title="Verbindung neu aufbauen">↻</button>
+      </div>
+      <div class="netsub" id="netSub"></div>
+    </div>
   </div>
 </div>
 <div class="lobby recap" id="recap">
@@ -3705,16 +3724,58 @@ function undoDecline(){
   undoReq=''; Sync.publish(); render(); renderUndo();
 }
 // Anzeige der offenen Rücknahme-Bitte
-/* Bei anhaltenden Zugriffsfehlern sagen, was los ist, statt still zu
-   verharren - der Spielstand liegt dann nur noch lokal vor. */
-function renderWarn(){
-  const el=document.getElementById('syncWarn');
-  if(!el) return;
-  const bad=Sync.fails>=3;
-  el.style.display=bad?'block':'none';
-  if(bad) el.textContent='Steuerung antwortet nicht ('+Sync.fails+' Versuche). '+
-    'Die Partie läuft lokal weiter, wird aber gerade nicht übertragen.';
+/* ---------- Verbindung: Zustand, Laufzeit, Wiederverbinden ----------
+   Die Transporte melden jeden Zugriff hierher. Daraus entsteht die Anzeige
+   im Panel - und die Möglichkeit, von Hand neu aufzusetzen. */
+const Net={
+  mode:'',                     // 'Steuerung' oder 'Server'
+  lastOk:0, lastTry:0, rtt:0, avg:0,
+  okR:0, badR:0, okW:0, badW:0,
+  reconnect:null,              // vom Transport gesetzt
+  readOk(ms){ this.okR++; this.lastOk=Date.now(); this.rtt=ms;
+              this.avg=this.avg?Math.round(this.avg*0.7+ms*0.3):ms; },
+  readFail(){ this.badR++; },
+  writeOk(){ this.okW++; this.lastOk=Date.now(); },
+  writeFail(){ this.badW++; },
+  // Zustand ergibt sich aus dem Abstand zum letzten erfolgreichen Zugriff
+  state(){
+    if(!this.lastOk) return 'init';
+    const age=Date.now()-this.lastOk;
+    if(age>30000||Sync.fails>=6) return 'down';
+    if(age>8000||Sync.fails>=2) return 'weak';
+    return 'ok';
+  }
+};
+function fmtAge(ms){
+  const s=Math.round(ms/1000);
+  return s<2?'gerade eben':(s<60?('vor '+s+' s'):('vor '+Math.round(s/60)+' min'));
 }
+function renderNet(){
+  const box=document.getElementById('netBox');
+  if(!box) return;
+  if(!Sync.transport){ box.style.display='none'; return; }
+  box.style.display='block';
+  const st=Net.state();
+  const dot=document.getElementById('netDot');
+  const txt=document.getElementById('netTxt');
+  const sub=document.getElementById('netSub');
+  dot.className='netdot '+st;
+  txt.textContent = st==='init' ? 'Verbinde …'
+                  : st==='ok'   ? 'Verbunden'
+                  : st==='weak' ? 'Gestört'
+                  :               'Getrennt';
+  const bits=[];
+  if(Net.avg) bits.push(Net.avg+' ms');
+  if(Net.lastOk) bits.push('Abgleich '+fmtAge(Date.now()-Net.lastOk));
+  if(st!=='ok'&&Sync.fails) bits.push(Sync.fails+' Fehlversuche');
+  sub.textContent=bits.join(' · ');
+  box.title=Net.mode+'  gelesen '+Net.okR+' ok / '+Net.badR+' Fehler'+
+            '\ngeschrieben '+Net.okW+' ok / '+Net.badW+' Fehler'+
+            (Net.rtt?('\nletzte Laufzeit '+Net.rtt+' ms'):'');
+  if(st==='down'&&!Sync.ready) sub.textContent='Kein Kontakt zur '+Net.mode;
+}
+// Bestehende Aufrufe im Synchronisationspfad zeigen weiterhin hierher
+function renderWarn(){ renderNet(); }
 function renderUndo(){
   const box=document.getElementById('undoAsk');
   const btn=document.getElementById('undoBtn');
@@ -4785,8 +4846,8 @@ function setupPLC(){
       const r=await post(body('&value='+encodeURIComponent(val)+'&write=1'),6000);
       if(!r.ok) throw new Error('Schreiben '+r.status);
       if(pending===val) pending=null;         // erfolgreich übertragen
-      Sync.last=val; Sync.fails=0;
-    }catch(e){ Sync.fails++; }
+      Sync.last=val; Sync.fails=0; Net.writeOk();
+    }catch(e){ Sync.fails++; Net.writeFail(); }
     finally{
       sending=false;
       try{ renderWarn(); }catch(e){}           // Anzeige darf nichts blockieren
@@ -4798,10 +4859,14 @@ function setupPLC(){
   }
   function write(val){ if(pending===null) pendingSince=Date.now(); pending=val; flush(); }
   async function read(){
-    const r=await post(body('&value=none&read=1'),4000);
-    if(!r.ok) throw new Error('Lesen '+r.status);
+    const t0=Date.now();
+    let r;
+    try{ r=await post(body('&value=none&read=1'),4000); }
+    catch(e){ Net.readFail(); throw e; }
+    if(!r.ok){ Net.readFail(); throw new Error('Lesen '+r.status); }
     const t=(await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
-    if(t.indexOf('<')>=0) throw new Error('Antwort ist keine Variable');
+    if(t.indexOf('<')>=0){ Net.readFail(); throw new Error('Antwort ist keine Variable'); }
+    Net.readOk(Date.now()-t0);
     return t;
   }
   Sync.transport={ send:write, confirms:true };
@@ -4871,6 +4936,13 @@ function setupPLC(){
     if(!busy && Date.now()-lastTry>8000){ clearTimeout(timer); loop(); }
     if(pending!==null && !sending) flush();
   },5000);
+  setInterval(renderNet,1000);              // Alter des letzten Abgleichs mitzählen
+  Net.mode='Steuerung';
+  Net.reconnect=()=>{                       // von Hand neu aufsetzen
+    Sync.fails=0; clearTimeout(timer); clearTimeout(retry);
+    busy=false; sending=false;
+    loop(); if(pending!==null) flush(); refreshHist(true);
+  };
 }
 
 try{ const n=sessionStorage.getItem('chessName');
@@ -4879,6 +4951,20 @@ for(const btn of document.querySelectorAll('.tc'))
   btn.addEventListener('click',()=>setTC(btn.dataset.tc));
 for(const b of document.querySelectorAll('.httab'))
   b.addEventListener('click',()=>{ histTab=b.dataset.tab; renderHist(); });
+document.getElementById('netBtn').addEventListener('click',(e)=>{
+  if(!Net.reconnect) return;
+  const b=e.currentTarget;
+  b.classList.add('busy'); setTimeout(()=>b.classList.remove('busy'),1200);
+  Net.reconnect();
+});
+/* Browser drosseln Zeitgeber im Hintergrund stark - beim Zurückkehren also
+   sofort abgleichen, statt auf den nächsten Takt zu warten. */
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && Net.reconnect) Net.reconnect();
+});
+window.addEventListener('online',()=>{ if(Net.reconnect) Net.reconnect(); });
+window.addEventListener('offline',()=>{ Sync.fails+=3; renderNet(); });
+
 document.getElementById('recapClose').addEventListener('click',hideRecap);
 document.getElementById('recapReview').addEventListener('click',startReview);
 document.getElementById('rvFirst').addEventListener('click',()=>reviewGo(0));
@@ -4937,8 +5023,8 @@ function setupServer(){
         .finally(()=>clearTimeout(t));
       if(!r.ok) throw new Error('Schreiben '+r.status);
       if(pending===val) pending=null;
-      Sync.last=val; Sync.fails=0;
-    }catch(e){ Sync.fails++; }
+      Sync.last=val; Sync.fails=0; Net.writeOk();
+    }catch(e){ Sync.fails++; Net.writeFail(); }
     sending=false; renderWarn();
     if(pending!==null){
       clearTimeout(retry);
@@ -4969,25 +5055,30 @@ function setupServer(){
       Sync.ready=true; renderLobby();
     } else if(txt!==Sync.last){ Sync.receive(txt); }
   }
-  let live=false;
-  if(Api.sse){
+  let live=false, es=null;
+  function openStream(){
+    if(!Api.sse) return;
+    try{ if(es) es.close(); }catch(e){}
     try{
-      const es=new EventSource(apiUrl('events'));
-      es.onmessage=(e)=>{ live=true; try{ apply(JSON.parse(e.data).s); }catch(err){} };
+      es=new EventSource(apiUrl('events'));
+      es.onmessage=(e)=>{ live=true; Net.readOk(Net.avg||20);
+                          try{ apply(JSON.parse(e.data).s); }catch(err){} };
       es.onerror=()=>{ live=false; };      // Abfragen springt dann ein
     }catch(e){}
   }
+  openStream();
   async function poll(){
     if(live&&Sync.ready) return;
     try{
       const ac=new AbortController();
       const t=setTimeout(()=>ac.abort(),4000);
+      const t0=Date.now();
       const r=await fetch(apiUrl('state'),{cache:'no-store',signal:ac.signal})
         .finally(()=>clearTimeout(t));
       if(!r.ok) throw new Error('Lesen '+r.status);
       apply((await r.json()).s);
-      Sync.fails=0;
-    }catch(e){ Sync.fails++; }
+      Sync.fails=0; Net.readOk(Date.now()-t0);
+    }catch(e){ Sync.fails++; Net.readFail(); }
     finally{ try{ renderWarn(); }catch(e){} }
   }
   const tick=()=>{ try{ poll().catch(()=>{}); }catch(e){} };
@@ -4995,6 +5086,12 @@ function setupServer(){
   setInterval(tick,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
   // Ausstehenden Schreibvorgang nicht liegen lassen
   setInterval(()=>{ if(pending!==null && !sending) flush(); },5000);
+  setInterval(renderNet,1000);
+  Net.mode='Server';
+  Net.reconnect=()=>{
+    Sync.fails=0; sending=false;
+    openStream(); tick(); if(pending!==null) flush(); refreshHist(true);
+  };
 }
 
 document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
