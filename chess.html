@@ -4787,10 +4787,13 @@ function setupPLC(){
       if(pending===val) pending=null;         // erfolgreich übertragen
       Sync.last=val; Sync.fails=0;
     }catch(e){ Sync.fails++; }
-    sending=false; renderWarn();
-    if(pending!==null){                        // erneut versuchen, mit Abstand
-      clearTimeout(retry);
-      retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
+    finally{
+      sending=false;
+      try{ renderWarn(); }catch(e){}           // Anzeige darf nichts blockieren
+      if(pending!==null){                      // erneut versuchen, mit Abstand
+        clearTimeout(retry);
+        retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
+      }
     }
   }
   function write(val){ if(pending===null) pendingSince=Date.now(); pending=val; flush(); }
@@ -4828,29 +4831,46 @@ function setupPLC(){
     busy=true;
     try{
       const remote=await read();
-      Sync.fails=0; renderWarn();
-      // Eigener Stand noch nicht bestätigt? Dann nichts übernehmen.
+      Sync.fails=0;
+      /* Zuerst den Zustand übernehmen, danach die Anzeige auffrischen. Andernfalls
+         verhindert ein Fehler in der Darstellung dauerhaft, dass Züge des Gegners
+         ankommen - die Abfrage liefe weiter, das Spiel bliebe trotzdem stehen. */
       if(!holdsBack() && acceptState(remote)){
         if(!Sync.ready){
           Sync.last=remote;
           applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
-          Sync.ready=true; renderLobby();
+          Sync.ready=true;
+          try{ renderLobby(); }catch(e){}
           // Platz aus der URL erst jetzt belegen – Stand ist bekannt
           if(side==='w'||side==='b') takeSeat(side);
           else if(side==='v') watchOnly();
         } else if(remote!==Sync.last){ Sync.receive(remote); }
       }
-    }catch(e){ Sync.fails++; renderWarn(); }
-    finally{ busy=false; }                  // sonst bliebe die Abfrage stehen
+    }catch(e){ Sync.fails++; }
+    finally{
+      busy=false;                           // sonst bliebe die Abfrage stehen
+      try{ renderWarn(); }catch(e){}        // Anzeige ist Beiwerk, kein Hindernis
+    }
   }
-  // Bei Störungen etwas Abstand halten, statt die Steuerung weiter zu bedrängen
+  /* Bei Störungen Abstand halten, statt die Steuerung weiter zu bedrängen.
+     Die Kette darf dabei nie abreißen: ein einziger Fehler ohne .catch würde
+     die Abfrage dauerhaft beenden - das Spiel liefe dann stumm weiter. */
+  let lastTry=0, timer=null;
   function loop(){
-    poll().then(()=>{
+    lastTry=Date.now();
+    poll().catch(()=>{}).then(()=>{
       const wait=Sync.fails?Math.min(5000,1000*Math.pow(2,Math.min(Sync.fails,3))):1000;
-      setTimeout(loop,wait);
+      clearTimeout(timer); timer=setTimeout(loop,wait);
     });
   }
   loop();
+  /* Wachhund: läuft unabhängig von der Kette. Bleibt die Abfrage trotz allem
+     stehen - hängender Zugriff, verlorener Zeitgeber, angehaltener Tab -,
+     startet er sie neu und schiebt einen ausstehenden Schreibvorgang an. */
+  setInterval(()=>{
+    if(!busy && Date.now()-lastTry>8000){ clearTimeout(timer); loop(); }
+    if(pending!==null && !sending) flush();
+  },5000);
 }
 
 try{ const n=sessionStorage.getItem('chessName');
@@ -4966,11 +4986,15 @@ function setupServer(){
         .finally(()=>clearTimeout(t));
       if(!r.ok) throw new Error('Lesen '+r.status);
       apply((await r.json()).s);
-      Sync.fails=0; renderWarn();
-    }catch(e){ Sync.fails++; renderWarn(); }
+      Sync.fails=0;
+    }catch(e){ Sync.fails++; }
+    finally{ try{ renderWarn(); }catch(e){} }
   }
-  poll();
-  setInterval(poll,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
+  const tick=()=>{ try{ poll().catch(()=>{}); }catch(e){} };
+  tick();
+  setInterval(tick,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
+  // Ausstehenden Schreibvorgang nicht liegen lassen
+  setInterval(()=>{ if(pending!==null && !sending) flush(); },5000);
 }
 
 document.getElementById('seatW').addEventListener('click',()=>takeSeat('w'));
