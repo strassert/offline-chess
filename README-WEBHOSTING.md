@@ -12,6 +12,7 @@ Getestet gegen Apache 2 mit PHP/FPM (z. B. cablelink `[CL MSP] Linux`).
 |-------|------|-------|
 | `dashboard.html` | Wurzel als `index.html` | 35 KB |
 | `chess.html` | Wurzel | ~175 KB |
+| `zug.html` und jede weitere `.html` im Projektordner | Wurzel | je nach Datei |
 | `manifest.webmanifest`, `sw.js` | Wurzel – für „Zum Startbildschirm" | 2 KB |
 | `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Wurzel | 23 KB |
 | `stockfish-18-lite-single.js` | Wurzel | 21 KB |
@@ -27,6 +28,7 @@ Ergebnis auf dem Webspace:
 /                        (Wurzel des Uploads)
 ├── index.html           (die umbenannte dashboard.html – Startseite)
 ├── chess.html           (das Spiel)
+├── zug.html             (und jede weitere Anwendung aus dem Projektordner)
 ├── manifest.webmanifest
 ├── sw.js
 ├── icon-192.png, icon-512.png, apple-touch-icon.png
