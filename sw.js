@@ -2,9 +2,10 @@
    Bewusst "Netz zuerst": Was der Server hat, gewinnt immer - so kann keine
    alte Fassung hängen bleiben. Der Zwischenspeicher springt nur ein, wenn
    gar nichts geht. Daten-Abrufe (api/, fremde Dienste) bleiben aussen vor. */
-const CACHE = 'seekirchen-1';
+const CACHE = 'seekirchen-2';
 const SCHALE = ['./', 'index.html', 'manifest.webmanifest',
-                'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+                'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
+                'zug.html'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SCHALE)).catch(() => {}));
