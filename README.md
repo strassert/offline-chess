@@ -109,6 +109,22 @@ Zug ist hervorgehoben, unter 30 s wird die Uhr rot) sowie die Namen aller
 Zuschauer. Ein Spieler kann nur ziehen, wenn seine Farbe am Zug ist;
 Schwarz sieht das Brett gedreht.
 
+#### Größe und Aufteilung
+
+Es gibt keine feste Fenstergröße. Das Brett bemisst sich an dem, was das
+Fenster hergibt, und wächst beim Ziehen am Rand mit:
+
+| Fenster | Aufteilung |
+|---------|------------|
+| breiter als hoch (Desktop, Panel, Handy quer) | Brett links, Panel rechts, beide gleich hoch |
+| höher als breit oder schmaler als 600 px | Brett oben, Panel darunter, Seite scrollt |
+
+Ein 1000 × 1000-Panel bekommt damit ein 738er Brett, ein 1920 × 1080-Bildschirm
+ein 900er (mehr wird nicht vergeben), ein Handy im Hochformat die volle
+Breite. Feldbeschriftung, Markierungen und die Umwandlungsauswahl skalieren
+mit. Das läuft ohne JavaScript, allein über CSS – Drehen des Geräts und
+Ziehen am Fenster wirken sofort.
+
 ### Stellungsbewertung für Zuschauer
 
 Wer als Zuschauer beitritt, sieht zusätzlich einen Bewertungsbalken, die
