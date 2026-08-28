@@ -109,22 +109,38 @@ OpenSSH verweigert das absichtlich. Wer nicht bei jedem Lauf tippen will,
 hinterlegt einen Schlüssel; danach fragt nichts mehr, und es liegt auch kein
 Passwort im Klartext herum.
 
-1. **Schlüssel erzeugen** (Eingabeaufforderung oder PowerShell):
+1. **Schlüssel erzeugen.** Der Ordner `.ssh` muss vorher da sein –
+   `ssh-keygen` legt ihn nicht selbst an. **Die beiden Konsolen schreiben
+   Umgebungsvariablen verschieden**; in PowerShell würde `%USERPROFILE%`
+   wörtlich genommen und die Antwort lautet „Pfad nicht gefunden".
+
+   PowerShell:
+
+   ```powershell
+   New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh"
+   ssh-keygen -t ed25519 -C "deploy webspace" -f "$env:USERPROFILE\.ssh\gg2_deploy"
+   ```
+
+   Eingabeaufforderung:
 
    ```
+   mkdir %USERPROFILE%\.ssh
    ssh-keygen -t ed25519 -C "deploy webspace" -f %USERPROFILE%\.ssh\gg2_deploy
    ```
 
    Eine Passphrase ist sinnvoll: Der Windows-Dienst *OpenSSH Authentication
-   Agent* merkt sie sich nach einmaligem `ssh-add %USERPROFILE%\.ssh\gg2_deploy`.
+   Agent* merkt sie sich nach einmaligem `ssh-add …\.ssh\gg2_deploy`.
    Läuft der Dienst nicht, fragt sonst der Schlüssel statt des Servers – dann
    entweder den Dienst starten oder ohne Passphrase erzeugen.
 
-2. **Öffentlichen Teil zum Hoster bringen.** Inhalt anzeigen:
+   Fehlt `ssh-keygen` ganz (`Get-Command ssh-keygen` findet nichts), unter
+   *Einstellungen → Apps → Optionale Features* den **OpenSSH-Client**
+   nachinstallieren.
 
-   ```
-   type %USERPROFILE%\.ssh\gg2_deploy.pub
-   ```
+2. **Öffentlichen Teil zum Hoster bringen.** Inhalt anzeigen – PowerShell
+   `Get-Content "$env:USERPROFILE\.ssh\gg2_deploy.pub"`, cmd
+   `type %USERPROFILE%\.ssh\gg2_deploy.pub`. Es ist eine einzige Zeile,
+   sie beginnt mit `ssh-ed25519`.
 
    Am besten über die Oberfläche des Hosters (Punkt *SSH-Schlüssel*). Gibt es
    den nicht, von Hand in die Datei `.ssh/authorized_keys` im **Heimat**-
@@ -147,7 +163,8 @@ Passwort im Klartext herum.
    `https://…/.ssh/authorized_keys` muss 403 oder 404 liefern. Die
    mitgelieferte `.htaccess` sperrt Punktdateien vorsorglich mit.
 
-3. **Eintragen** in `deploy.config.bat`:
+3. **Eintragen** in `deploy.config.bat` – dort gilt wieder die
+   cmd-Schreibweise, die Datei wird von cmd gelesen:
 
    ```bat
    set "SFTP_KEY=%USERPROFILE%\.ssh\gg2_deploy"
