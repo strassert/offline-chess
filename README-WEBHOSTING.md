@@ -102,6 +102,69 @@ außerhalb eines Repositorys entfällt die Frage.
 Wer sie dauerhaft nicht will, trägt in `deploy.config.bat`
 `set "GIT_PULL=ja"` oder `set "GIT_PULL=nein"` ein.
 
+### Ohne Passwortabfrage: SSH-Schlüssel
+
+Das Windows-eigene `sftp` nimmt **kein** Passwort aus einer Datei entgegen –
+OpenSSH verweigert das absichtlich. Wer nicht bei jedem Lauf tippen will,
+hinterlegt einen Schlüssel; danach fragt nichts mehr, und es liegt auch kein
+Passwort im Klartext herum.
+
+1. **Schlüssel erzeugen** (Eingabeaufforderung oder PowerShell):
+
+   ```
+   ssh-keygen -t ed25519 -C "deploy webspace" -f %USERPROFILE%\.ssh\gg2_deploy
+   ```
+
+   Eine Passphrase ist sinnvoll: Der Windows-Dienst *OpenSSH Authentication
+   Agent* merkt sie sich nach einmaligem `ssh-add %USERPROFILE%\.ssh\gg2_deploy`.
+   Läuft der Dienst nicht, fragt sonst der Schlüssel statt des Servers – dann
+   entweder den Dienst starten oder ohne Passphrase erzeugen.
+
+2. **Öffentlichen Teil zum Hoster bringen.** Inhalt anzeigen:
+
+   ```
+   type %USERPROFILE%\.ssh\gg2_deploy.pub
+   ```
+
+   Am besten über die Oberfläche des Hosters (Punkt *SSH-Schlüssel*). Gibt es
+   den nicht, von Hand in die Datei `.ssh/authorized_keys` im **Heimat**-
+   Verzeichnis des SFTP-Kontos:
+
+   ```
+   sftp benutzer@gg2.members.cablelink.at
+   sftp> mkdir .ssh
+   sftp> chmod 700 .ssh
+   sftp> put C:/Users/…/.ssh/gg2_deploy.pub .ssh/authorized_keys
+   sftp> chmod 600 .ssh/authorized_keys
+   sftp> bye
+   ```
+
+   Gibt es dort schon eine `authorized_keys`, erst herunterladen und die Zeile
+   anhängen – `put` überschreibt sie sonst.
+
+   **Aufpassen, wo `/` liegt.** Ist das SFTP-Konto direkt auf das
+   Web-Verzeichnis eingesperrt, landet `.ssh` im Web. Danach prüfen:
+   `https://…/.ssh/authorized_keys` muss 403 oder 404 liefern. Die
+   mitgelieferte `.htaccess` sperrt Punktdateien vorsorglich mit.
+
+3. **Eintragen** in `deploy.config.bat`:
+
+   ```bat
+   set "SFTP_KEY=%USERPROFILE%\.ssh\gg2_deploy"
+   ```
+
+   Das Skript meldet dann *(Anmeldung mit Schluessel …)* und läuft ohne
+   Abfrage durch. Zeigt der Eintrag ins Leere, sagt es das und fragt wie
+   bisher das Passwort ab.
+
+Probe vor dem ersten Einsatz: `sftp -i %USERPROFILE%\.ssh\gg2_deploy
+benutzer@gg2.members.cablelink.at` muss ohne Passwortabfrage öffnen. Tut es
+das nicht, mit `-v` nachsehen – meist fehlen die Rechte auf `.ssh`
+(700/600) oder der Tarif erlaubt keine Schlüsselanmeldung.
+
+Der WinSCP-Rückfallweg kennt diese Schlüssel nicht (er bräuchte eine
+umgewandelte `.ppk`) und fragt weiterhin das Passwort ab.
+
 Voraussetzung ist eines von beidem:
 
 - **OpenSSH-Client** – in Windows 10/11 meist vorhanden und der bevorzugte

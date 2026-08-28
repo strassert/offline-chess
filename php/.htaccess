@@ -6,6 +6,18 @@ AddType application/wasm .wasm
 # Textdatei - "Zum Startbildschirm" bietet der Browser dann nicht an.
 AddType application/manifest+json .webmanifest
 
+# Punktdateien gehoeren nie ins Web. Greift auch, falls beim Einrichten der
+# Schluesselanmeldung ein .ssh-Ordner im Web-Verzeichnis landet.
+<FilesMatch "^\.">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
 # Engine-Dateien ändern sich nie – lange vorhalten, Seite dagegen frisch holen
 <IfModule mod_expires.c>
   ExpiresActive On

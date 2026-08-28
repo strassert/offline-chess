@@ -13,6 +13,11 @@ set "SFTP_HOST=gg2.members.cablelink.at"
 set "SFTP_USER=<dein-benutzername>"
 set "SFTP_DIR=/"
 
+rem Anmeldung mit SSH-Schluessel statt Passwort: hier den privaten Schluessel
+rem eintragen, dann fragt sftp nichts mehr. Leer lassen = Passwortabfrage.
+rem   set "SFTP_KEY=%USERPROFILE%\.ssh\gg2_deploy"
+set "SFTP_KEY="
+
 rem Vor der Uebertragung fragt das Skript, ob es den Stand von GitHub
 rem holen soll. Wer die Frage nicht will, entscheidet hier ein fuer alle
 rem Mal - alles andere (auch nichts eintragen) bedeutet: nachfragen.

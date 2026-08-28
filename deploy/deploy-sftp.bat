@@ -176,9 +176,19 @@ rem Schreibrecht fuer die Zustandsdatei; scheitert auf manchen Tarifen - egal
 >> "%LIST%" echo -chmod 777 .
 >> "%LIST%" echo bye
 
-echo   ^(sftp fragt das Passwort gleich selbst ab^)
+rem Mit hinterlegtem Schluessel fragt sftp nichts mehr; ohne fragt es selbst
+set "KEYOPT="
+if not "!SFTP_KEY!"=="" (
+  if exist "!SFTP_KEY!" (
+    set KEYOPT=-i "!SFTP_KEY!"
+    echo   ^(Anmeldung mit Schluessel !SFTP_KEY!^)
+  ) else (
+    echo   Hinweis: SFTP_KEY zeigt auf keine Datei - es wird das Passwort abgefragt.
+  )
+)
+if "!KEYOPT!"=="" echo   ^(sftp fragt das Passwort gleich selbst ab^)
 rem -b schaltet die Passwortabfrage sonst ab
-sftp -oBatchMode=no -b "%LIST%" %SFTP_USER%@%SFTP_HOST%
+sftp !KEYOPT! -oBatchMode=no -b "%LIST%" %SFTP_USER%@%SFTP_HOST%
 set "RC=!ERRORLEVEL!"
 del "%LIST%" >nul 2>&1
 goto :done
