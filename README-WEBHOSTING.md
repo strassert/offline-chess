@@ -10,7 +10,8 @@ Getestet gegen Apache 2 mit PHP/FPM (z. B. cablelink `[CL MSP] Linux`).
 
 | Datei | Ziel | Größe |
 |-------|------|-------|
-| `chess.html` | Wurzel (ggf. als `index.html`) | ~170 KB |
+| `dashboard.html` | Wurzel als `index.html` | 16 KB |
+| `chess.html` | Wurzel | ~175 KB |
 | `stockfish-18-lite-single.js` | Wurzel | 21 KB |
 | `stockfish-18-lite-single.wasm` | Wurzel | 7,3 MB |
 | `php/.htaccess` | Wurzel als `.htaccess` | 1 KB |
@@ -22,7 +23,8 @@ Ergebnis auf dem Webspace:
 
 ```
 /                        (Wurzel des Uploads)
-├── index.html           (die umbenannte chess.html)
+├── index.html           (die umbenannte dashboard.html – Startseite)
+├── chess.html           (das Spiel)
 ├── stockfish-18-lite-single.js
 ├── stockfish-18-lite-single.wasm
 ├── .htaccess
@@ -39,16 +41,18 @@ Partien) legt PHP selbst an.
 
 ## Schritte
 
-1. **Dateien per FTP/SFTP hochladen**, Struktur wie oben. `chess.html` in
-   `index.html` umbenennen, damit die Adresse ohne Dateinamen funktioniert.
+1. **Dateien per FTP/SFTP hochladen**, Struktur wie oben. `dashboard.html`
+   in `index.html` umbenennen, damit die Adresse ohne Dateinamen die
+   Startseite zeigt; `chess.html` behält seinen Namen.
    Die `.wasm`-Datei **binär** übertragen (die meisten Programme machen das
    automatisch; bei FileZilla notfalls unter *Übertragung → Übertragungstyp
    → Binär* erzwingen).
 2. **Schreibrechte für `api/`** setzen – PHP muss dort die Zustandsdatei
    anlegen. Im FTP-Programm Rechte auf `755` stellen; klappt das nicht,
    `775` oder `777` versuchen.
-3. **Aufrufen**: `https://gg2.members.cablelink.at/`
-   Die Seite erkennt die PHP-Endpunkte selbst – kein URL-Zusatz nötig.
+3. **Aufrufen**: `https://gg2.members.cablelink.at/` zeigt die Startseite
+   mit Wetter und Anwendungsauswahl, `…/chess.html` das Spiel. Das Spiel
+   erkennt die PHP-Endpunkte selbst – kein URL-Zusatz nötig.
 
 Prüfen lässt sich der Server-Teil direkt:
 `https://…/api/health.php` muss `{"ok":true,"backend":"php","writable":true}`
@@ -82,6 +86,38 @@ Voraussetzung ist eines von beidem:
 - **WinSCP** (winscp.net) – Rückfallebene, falls `sftp` fehlt. Auch hier
   wird das Passwort verdeckt abgefragt; es liegt allerdings kurz in einer
   temporären Skriptdatei, die sofort nach der Übertragung gelöscht wird.
+
+## Startseite
+
+`dashboard.html` liegt als `index.html` in der Wurzel und zeigt zweierlei:
+das Wetter für Seekirchen am Wallersee und die Auswahl der Anwendungen.
+Wie das Spiel ist es eine einzelne Datei ohne Abhängigkeiten und braucht
+kein PHP.
+
+**Wetter** kommt von [Open-Meteo](https://open-meteo.com/) – frei nutzbar,
+ohne Schlüssel und ohne Anmeldung, direkt aus dem Browser des Besuchers
+abgefragt (der Webspace selbst holt nichts). Angezeigt werden der aktuelle
+Stand, die nächsten 24 Stunden und sieben Tage. Die letzte gelungene
+Antwort liegt im Browser; ist der Dienst gerade nicht erreichbar, bleibt
+dieser Stand mit Altersangabe stehen, statt die Seite leer zu lassen.
+Aufgefrischt wird alle 15 Minuten, beim Zurückkehren auf die Seite und über
+den Knopf unten links.
+
+**Anderer Ort** ohne Änderung der Datei: `?ort=Salzburg&lat=47.80&lon=13.04`
+an die Adresse hängen. Dauerhaft: die Werte in `const ORT={…}` am Anfang des
+Skriptteils eintragen.
+
+**Weitere Anwendung** aufnehmen – eine Zeile in derselben Liste:
+
+```js
+const APPS=[
+  { name:'Schach', datei:'chess.html', icon:'chess',
+    text:'Zwei Spieler an zwei Rechnern, Zuschauer, Uhr und Auswertung.' }
+];
+```
+
+Ein eigenes Sinnbild kommt als SVG in `APPICON` dazu; ohne Eintrag bleibt
+die Kachel einfach ohne Bild.
 
 ## Unterordner
 
@@ -129,3 +165,4 @@ merkbar.
 | „Historie kann nicht gespeichert werden (Lesen 404)" | `api/hist.php` wurde nicht mit hochgeladen |
 | „… (Schreiben 500)" | Schreibrechte auf `api/` fehlen, siehe `"writable"` in `health.php` |
 | Analyse bleibt aus | `.wasm` fehlt, wurde als Text übertragen, oder `.htaccess` mit `AddType application/wasm` fehlt |
+| Startseite ohne Wetter | Besucher hat keinen Zugang zu `api.open-meteo.com` (Netzsperre, Werbeblocker); der Hinweis auf der Karte nennt den Grund |

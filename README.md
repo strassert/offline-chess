@@ -8,6 +8,7 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 | Datei | Zweck |
 |-------|-------|
 | `chess.html` | Das Spiel – vollständige Schachregeln, Zugliste, Undo, Brett drehen |
+| `dashboard.html` | Startseite fürs Webhosting: Wetter und Auswahl der Anwendungen (siehe [README-WEBHOSTING](README-WEBHOSTING.md#startseite)) |
 | `response.asp` | Rückgabeseite für den Goform-Zugriff (**nur für PLC-Sync nötig**) |
 | `stockfish-18-lite-single.js` | Stockfish-Engine (Loader, 21 KB) – **nur für die Zuschauer-Analyse** |
 | `stockfish-18-lite-single.wasm` | Stockfish-Engine (7,3 MB) – dito |

@@ -38,7 +38,7 @@ if "%SFTP_USER%"=="" (
 echo.
 echo === Dateien pruefen ===
 set "MISSING="
-for %%F in (chess.html php\.htaccess php\api\state.php php\api\hist.php php\api\health.php php\api\reset.php php\api\.htaccess) do (
+for %%F in (chess.html dashboard.html php\.htaccess php\api\state.php php\api\hist.php php\api\health.php php\api\reset.php php\api\.htaccess) do (
   if not exist "%ROOT%\%%F" set "MISSING=!MISSING! %%F"
 )
 if not "!MISSING!"=="" (
@@ -81,7 +81,8 @@ rem ================= Weg 1: Windows-eigenes sftp ==================
 set "LIST=%TEMP%\chess-sftp-%RANDOM%.txt"
 > "%LIST%" echo cd %SFTP_DIR%
 >> "%LIST%" echo lcd "%ROOT%"
->> "%LIST%" echo put chess.html index.html
+>> "%LIST%" echo put dashboard.html index.html
+>> "%LIST%" echo put chess.html chess.html
 if defined WITHENGINE (
   >> "%LIST%" echo put stockfish-18-lite-single.js
   >> "%LIST%" echo put stockfish-18-lite-single.wasm
@@ -128,7 +129,8 @@ set "WS=%TEMP%\chess-winscp-%RANDOM%.txt"
 >> "%WS%" echo open sftp://%SFTP_USER%:!PW!@%SFTP_HOST%/ -hostkey="*"
 >> "%WS%" echo cd %SFTP_DIR%
 >> "%WS%" echo lcd "%ROOT%"
->> "%WS%" echo put chess.html index.html
+>> "%WS%" echo put dashboard.html index.html
+>> "%WS%" echo put chess.html chess.html
 if defined WITHENGINE (
   >> "%WS%" echo put stockfish-18-lite-single.js
   >> "%WS%" echo put stockfish-18-lite-single.wasm
@@ -163,7 +165,8 @@ if not "%RC%"=="0" (
 
 echo === Fertig ===
 echo.
-echo   Aufrufen:  https://%SFTP_HOST%/
+echo   Startseite: https://%SFTP_HOST%/
+echo   Schach:     https://%SFTP_HOST%/chess.html
 echo   Pruefen:   https://%SFTP_HOST%/api/health.php
 echo              muss {"ok":true,...,"writable":true} liefern.
 echo.
