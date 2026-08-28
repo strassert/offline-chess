@@ -234,6 +234,24 @@ const APPS=[
 Ein eigenes Sinnbild kommt als SVG in `APPICON` dazu; ohne Eintrag bleibt
 die Kachel einfach ohne Bild.
 
+**Die Datei selbst** muss nur im Projektordner liegen: Das Übertragungsskript
+nimmt **jede weitere `.html`** von dort mit – `chess.html`, `dashboard.html`
+und die Diagnoseseite `pvtest.html` sind bereits eigens behandelt, alles
+andere wird unverändert hochgeladen. Vor der Übertragung listet es auf, was
+es gefunden hat:
+
+```
+=== Weitere Anwendungen ===
+  train.html
+  flappy-bird.html
+```
+
+Zwei Dinge dazu: Ohne Eintrag in `APPS` ist die Seite zwar hochgeladen, aber
+von der Startseite aus nicht erreichbar. Und liegt die Datei nicht im
+Repository (wie `flappy-bird.html`, die in `.gitignore` steht), holt sie ein
+`git pull` auf einem anderen Rechner auch nicht – sie existiert dann nur
+dort, wo du sie angelegt hast.
+
 ### Abfuhrtermine
 
 Die Zeile **Abfuhr** unter dem Wetter zeigt die nächsten vier Termine; was

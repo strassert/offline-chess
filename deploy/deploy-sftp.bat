@@ -115,6 +115,20 @@ if not "!MISSING!"=="" (
   pause
   exit /b 1
 )
+rem Weitere Anwendungen: jede .html im Projektordner ausser den bekannten
+rem wird mit hochgeladen - so kommt Neues ohne Aenderung am Skript mit.
+echo.
+echo === Weitere Anwendungen ===
+set /a EXTRAN=0
+for %%F in ("%ROOT%\*.html") do (
+  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="dashboard.html" (
+  if /i not "%%~nxF"=="pvtest.html" (
+    set /a EXTRAN+=1
+    echo   %%~nxF
+  ))
+)
+if !EXTRAN!==0 echo   keine ^(nur Startseite und Schach^)
+
 if exist "%ROOT%\stockfish-18-lite-single.wasm" (
   set "WITHENGINE=1"
 ) else (
@@ -151,6 +165,12 @@ set "LIST=%TEMP%\chess-sftp-%RANDOM%.txt"
 >> "%LIST%" echo lcd "%ROOT%"
 >> "%LIST%" echo put dashboard.html index.html
 >> "%LIST%" echo put chess.html chess.html
+for %%F in ("%ROOT%\*.html") do (
+  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="dashboard.html" (
+  if /i not "%%~nxF"=="pvtest.html" (
+    >> "%LIST%" echo put "%%~nxF"
+  ))
+)
 >> "%LIST%" echo put manifest.webmanifest
 >> "%LIST%" echo put sw.js
 >> "%LIST%" echo put icon-192.png
@@ -216,6 +236,12 @@ set "WS=%TEMP%\chess-winscp-%RANDOM%.txt"
 >> "%WS%" echo lcd "%ROOT%"
 >> "%WS%" echo put dashboard.html index.html
 >> "%WS%" echo put chess.html chess.html
+for %%F in ("%ROOT%\*.html") do (
+  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="dashboard.html" (
+  if /i not "%%~nxF"=="pvtest.html" (
+    >> "%WS%" echo put "%%~nxF"
+  ))
+)
 >> "%WS%" echo put manifest.webmanifest
 >> "%WS%" echo put sw.js
 >> "%WS%" echo put icon-192.png
