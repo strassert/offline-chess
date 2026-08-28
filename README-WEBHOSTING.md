@@ -325,6 +325,40 @@ Ersatz für einen Anbieter-Test: Ein Shared-Webspace teilt seine Anbindung
 mit anderen. Und pro Messung gehen rund 28 MB auf das Traffic-Kontingent,
 weshalb Punkt 3 bewusst nicht von selbst läuft.
 
+## Server messen
+
+`deploy/bench.js` misst, was der Webspace unter mehreren gleichzeitigen
+Zugriffen leistet – die Frage hinter „reicht das für vier Spieler?". Es
+braucht nur Node (ab 18), keine Pakete:
+
+```
+node deploy/bench.js https://gg2.members.cablelink.at
+```
+
+Gemessen wird in vier Teilen:
+
+1. **Messreihen** – dieselbe Anfrage vielfach: die Startseite (statisch),
+   `health.php` (PHP-Start), `state.php` (Datei lesen) und ein 1-KB-POST auf
+   `speed.php` (PHP schreibt). Ausgewiesen werden Durchsatz, Median, p95 und
+   Maximum – der Median sagt, wie es sich normalerweise anfühlt, p95, wie
+   schlecht es im schlechten Fall wird.
+2. **Steigerung** – dieselbe Anfrage mit 1, 2, 4, 8 … gleichzeitigen
+   Verbindungen. Wächst der Durchsatz nicht mehr mit, ist die Grenze des
+   Tarifs erreicht; das Urteil nennt die Stufe.
+3. **Dauerlast wie im Spiel** – vier nachgestellte Clients fragen zwanzig
+   Sekunden lang jede Sekunde den Spielstand ab, genau wie das Schachspiel.
+4. **Urteil** – gescheiterte Anfragen mit Aufschlüsselung nach HTTP-Code,
+   die Einschätzung für den Spielbetrieb und die übertragene Menge.
+
+Schalter: `-p` gleichzeitige Verbindungen, `-n` Anfragen je Reihe, `-c`
+Clients, `-s` Sekunden Dauerlast, `--stark` hebt die Obergrenzen an.
+
+**Rücksicht:** Das ist ein geteilter Server, die Rechenzeit teilst du dir mit
+anderen. Die Vorgaben sind deshalb zurückhaltend (ein Lauf überträgt rund
+5 MB und dauert etwa eine Minute); `--stark` nur mit Bedacht und nicht in
+Dauerschleife. Und wie beim Durchsatztest der Startseite gilt: gemessen wird
+der Weg zu diesem Server, samt eigener Leitung – nicht der Server allein.
+
 ## Unterordner
 
 Ein Upload nach `/schach/` funktioniert genauso – die Seite bestimmt ihren

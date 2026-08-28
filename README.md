@@ -10,6 +10,7 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 | `chess.html` | Das Spiel – vollständige Schachregeln, Zugliste, Undo, Brett drehen |
 | `dashboard.html` | Startseite fürs Webhosting: Anwendungen, dazu Wetter und Abfuhrtermine (siehe [README-WEBHOSTING](README-WEBHOSTING.md#startseite)) |
 | `manifest.webmanifest`, `sw.js`, `icon-*.png` | damit die Startseite auf dem Handy als App abgelegt werden kann |
+| `deploy/bench.js` | misst den Webspace unter mehreren gleichzeitigen Zugriffen |
 | `response.asp` | Rückgabeseite für den Goform-Zugriff (**nur für PLC-Sync nötig**) |
 | `stockfish-18-lite-single.js` | Stockfish-Engine (Loader, 21 KB) – **nur für die Zuschauer-Analyse** |
 | `stockfish-18-lite-single.wasm` | Stockfish-Engine (7,3 MB) – dito |
