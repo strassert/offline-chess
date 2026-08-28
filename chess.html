@@ -4043,7 +4043,9 @@ function fetchT(url,opt,ms){
    Getrennt vom Spielstand: sie aendert sich nur am Partieende und darf
    deshalb viel mehr Partien fassen. Gelesen wird sie nur, wenn sie
    jemand sieht (Lobby, Auswertung) - nicht im Sekundentakt. */
-const Hist={ load:null, save:null, at:0, broken:false };
+/* hint/err: was der Nutzer tun kann, wenn die Ablage nicht antwortet.
+   Beides setzt der jeweilige Transport - eine SPS-Variable gibt es nur dort. */
+const Hist={ load:null, save:null, at:0, broken:false, hint:'', err:'' };
 function histToText(){ return hist.map(e=>[e.w,e.b,e.r,e.n,e.t].join('~')).join('!'); }
 function histFromText(v){
   hist=(v||'').split('!').filter(Boolean).map(e=>{
@@ -4060,7 +4062,7 @@ async function refreshHist(force){
   let v;
   try{ v=await Hist.load(); }
   catch(e){                                   // Ablage nicht erreichbar
-    Hist.broken=true;
+    Hist.broken=true; Hist.err=String(e&&e.message||e);
     if(!hist.length) loadLocalHist();         // wenigstens der eigene Stand
     renderHist(); return;
   }
@@ -4077,7 +4079,8 @@ async function storeHist(){
   if(!Hist.save) return;
   Hist.at=Date.now();
   try{ await Hist.save(histToText()); Hist.broken=false; }
-  catch(e){ Hist.broken=true; saveLocalHist(); renderHist(); }
+  catch(e){ Hist.broken=true; Hist.err=String(e&&e.message||e);
+            saveLocalHist(); renderHist(); }
 }
 function tickClocks(){
   if(!Sync.transport) return;
@@ -4660,8 +4663,8 @@ let histTab='games';
 function renderHist(){
   const html=(histTab==='board')?boardHtml():histHtml();
   const warn=Hist.broken?'<div class="histwarn">Historie kann nicht gespeichert '+
-    'werden – Variable '+esc(Hist.name||'gChessHist')+' auf der Steuerung anlegen. '+
-    'Bis dahin merkt sie sich dieser Browser.</div>':'';
+    'werden'+(Hist.err?' ('+esc(Hist.err)+')':'')+'. '+esc(Hist.hint)+
+    ' Bis dahin merkt sie sich dieser Browser.</div>':'';
   const leer=hist.length?'':'<div class="histleer">Noch keine Partien gespielt.</div>';
   for(const id of ['lobbyHist','recapHist']){
     const el=document.getElementById(id);
@@ -4938,6 +4941,7 @@ function setupPLC(){
     if(!r.ok) throw new Error('Schreiben '+r.status);
   };
   Hist.name=hpv;
+  Hist.hint='Variable '+hpv+' auf der Steuerung anlegen (STRING[2000], remanent).';
 
   const side=(params.get('side')||'').toLowerCase().charAt(0);
   applySide(); showLobby();
@@ -5109,6 +5113,11 @@ function setupServer(){
       {method:'POST',headers:{'Content-Type':'text/plain'},body:val},6000);
     if(!r.ok) throw new Error('Schreiben '+r.status);
   };
+  Hist.name=apiUrl('hist');
+  Hist.hint=Api.ext==='.php'
+    ? 'Auf dem Webspace fehlt api/hist.php, oder der Ordner api ist nicht '+
+      'beschreibbar (api/health.php muss "writable":true melden).'
+    : 'Der Server beantwortet /api/hist nicht - läuft dort die aktuelle Fassung?';
   applySide(); showLobby();
 
   function apply(txt){
