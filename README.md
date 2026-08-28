@@ -8,6 +8,8 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 | Datei | Zweck |
 |-------|-------|
 | `chess.html` | Das Spiel – vollständige Schachregeln, Zugliste, Undo, Brett drehen |
+| `zug.html` | Zugsimulator (Shinkansen, S-Bahn Salzburg) – klassisch oder Kindermodus (3+); Einzeldatei, aus [strassert/Test](https://github.com/strassert/Test) gebaut via `build-zug.js` |
+| `build-zug.js` | baut `zug.html` neu aus den Quellen des Zugsimulators (`node build-zug.js`) |
 | `dashboard.html` | Startseite fürs Webhosting: Anwendungen, dazu Wetter und Abfuhrtermine (siehe [README-WEBHOSTING](README-WEBHOSTING.md#startseite)) |
 | `manifest.webmanifest`, `sw.js`, `icon-*.png` | damit die Startseite auf dem Handy als App abgelegt werden kann |
 | `deploy/bench.js` | misst den Webspace unter mehreren gleichzeitigen Zugriffen |
