@@ -146,22 +146,30 @@ Passwort im Klartext herum.
    den nicht, von Hand in die Datei `.ssh/authorized_keys` im **Heimat**-
    Verzeichnis des SFTP-Kontos:
 
+   Verbinden mit `sftp benutzer@gg2.members.cablelink.at`, dann diese Zeilen
+   einzeln eingeben (**ohne** den `sftp>`-Prompt – der steht schon da):
+
    ```
-   sftp benutzer@gg2.members.cablelink.at
-   sftp> mkdir .ssh
-   sftp> chmod 700 .ssh
-   sftp> put C:/Users/…/.ssh/gg2_deploy.pub .ssh/authorized_keys
-   sftp> chmod 600 .ssh/authorized_keys
-   sftp> bye
+   pwd
+   ls -a
+   mkdir .ssh
+   chmod 700 .ssh
+   put C:/Users/…/.ssh/gg2_deploy.pub .ssh/authorized_keys
+   chmod 600 .ssh/authorized_keys
+   bye
    ```
 
    Gibt es dort schon eine `authorized_keys`, erst herunterladen und die Zeile
    anhängen – `put` überschreibt sie sonst.
 
-   **Aufpassen, wo `/` liegt.** Ist das SFTP-Konto direkt auf das
-   Web-Verzeichnis eingesperrt, landet `.ssh` im Web. Danach prüfen:
-   `https://…/.ssh/authorized_keys` muss 403 oder 404 liefern. Die
-   mitgelieferte `.htaccess` sperrt Punktdateien vorsorglich mit.
+   **Erst `pwd` und `ls -a` ansehen.** Stehen dort `index.html` und `api/`,
+   dann ist `/` das Web-Verzeichnis und nicht das Heimatverzeichnis des
+   Kontos. Dann greift die Schlüsselanmeldung meist gar nicht – der
+   SSH-Dienst sucht `authorized_keys` woanders –, und die Datei wäre
+   obendrein öffentlich abrufbar. In dem Fall wieder wegräumen und den
+   Schlüssel über die Oberfläche des Hosters hinterlegen. Zur Sicherheit
+   sperrt die mitgelieferte `.htaccess` Punktdateien; prüfen lässt es sich
+   mit `https://…/.ssh/authorized_keys`, das 403 oder 404 liefern muss.
 
 3. **Eintragen** in `deploy.config.bat` – dort gilt wieder die
    cmd-Schreibweise, die Datei wird von cmd gelesen:
