@@ -28,8 +28,21 @@ header('Content-Type: application/json; charset=utf-8');
 $cache = __DIR__ . '/muell.cache.json';
 $lokal = __DIR__ . '/muell.ics';
 
-/* Frisch genug? Dann gar nicht erst nachsehen. */
-if (is_file($cache) && time() - (int) filemtime($cache) < FRISCH) {
+/* api/muell.php?pruefen=1 sagt beim Einrichten, woran es hakt: Wird die
+   Quelle erreicht? Ist es überhaupt ein Kalender? Wie viele Termine kommen
+   an? Geprüft wird nur die eingetragene Quelle - eine Adresse von aussen
+   nimmt der Endpunkt bewusst nicht entgegen. */
+$pruefen = isset($_GET['pruefen']);
+if ($pruefen) {
+    $b = ['quelle' => QUELLE !== '' ? QUELLE : ($lokal_da = is_file($lokal) ? 'api/muell.ics' : '(nichts eingetragen)'),
+          'art' => QUELLE !== '' ? 'Adresse' : (is_file($lokal) ? 'Datei' : 'keine'),
+          'zwischenspeicher' => is_file($cache)
+              ? (time() - (int) filemtime($cache)) . ' s alt' : 'noch keiner',
+          'schreibbar' => is_writable(__DIR__)];
+}
+
+/* Frisch genug? Dann gar nicht erst nachsehen. Beim Prüfen aber immer holen. */
+if (!$pruefen && is_file($cache) && time() - (int) filemtime($cache) < FRISCH) {
     $roh = (string) file_get_contents($cache);
     if ($roh !== '') { echo $roh; exit; }
 }
@@ -44,7 +57,7 @@ if (QUELLE !== '') {
     // Nur https und nur der eingetragene Rechner - kein offener Weiterleiter
     if (($teil['scheme'] ?? '') !== 'https' || !in_array($host, $erlaubt, true)) {
         http_response_code(500);
-        echo json_encode(['error' => 'Quelle nicht erlaubt']);
+        echo json_encode(['error' => 'Quelle nicht erlaubt (nur https)']);
         exit;
     }
     $ctx = stream_context_create(['http' => [
@@ -58,10 +71,23 @@ if (QUELLE !== '') {
 }
 
 if (trim($ics) === '') {
+    if ($pruefen) {
+        $b['ergebnis'] = QUELLE !== ''
+            ? 'Quelle nicht erreichbar oder leer'
+            : 'weder QUELLE eingetragen noch api/muell.ics vorhanden';
+        echo json_encode($b, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
     // Nichts Neues - lieber den alten Stand als gar nichts
     if (is_file($cache)) { echo (string) file_get_contents($cache); exit; }
     echo json_encode(['error' => 'nicht eingerichtet']);
     exit;
+}
+if ($pruefen) {
+    $b['bytes'] = strlen($ics);
+    $b['kalender'] = strpos($ics, 'BEGIN:VCALENDAR') !== false;
+    $b['eintraege'] = substr_count($ics, 'BEGIN:VEVENT');
+    $b['anfang'] = mb_substr(trim(str_replace(["\r", "\n"], ' ', $ics)), 0, 120);
 }
 
 /* ---- ICS lesen: nur DTSTART und SUMMARY je VEVENT ------------------- */
@@ -93,4 +119,11 @@ $termine = array_slice($termine, 0, ANZAHL);
 
 $aus = json_encode(['stand' => time(), 'termine' => $termine], JSON_UNESCAPED_UNICODE);
 @file_put_contents($cache, $aus);        // schlägt fehl, wenn api/ nicht schreibbar ist
+if ($pruefen) {
+    $b['kommende_termine'] = count($termine);
+    $b['naechster'] = $termine[0] ?? null;
+    $b['ergebnis'] = $termine ? 'in Ordnung' : 'Kalender gelesen, aber kein künftiger Termin';
+    echo json_encode($b, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
 echo $aus;

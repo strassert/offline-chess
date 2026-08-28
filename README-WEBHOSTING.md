@@ -150,6 +150,18 @@ nachdem was die Gemeinde anbietet, beide in `api/muell.php` oben einstellbar:
 Gelesen werden je Termin nur Datum (`DTSTART`) und Bezeichnung (`SUMMARY`);
 Vergangenes fällt weg, die nächsten sechs Termine gehen an die Seite.
 
+**Prüfen, ob es klappt:** `https://…/api/muell.php?pruefen=1` holt die Quelle
+frisch und sagt, was ankommt – Größe, ob es überhaupt ein Kalender ist, wie
+viele Einträge und welcher Termin als nächster gilt. Die Prüfung greift nur
+auf die eingetragene Quelle zu; eine Adresse von aussen nimmt der Endpunkt
+bewusst nicht entgegen.
+
+```json
+{"quelle":"api/muell.ics","art":"Datei","kalender":true,"eintraege":7,
+ "kommende_termine":6,"naechster":{"d":"2026-08-29","t":"Restmüll"},
+ "ergebnis":"in Ordnung"}
+```
+
 **Für Seekirchen am Wallersee** führt der Weg über
 <https://www.seekirchen.at/abfallkalender> (GEM2GO/RiS-Kommunal): dort Straße
 und Hausnummer wählen, dann steht unter *Ihre Termine im Überblick* der
