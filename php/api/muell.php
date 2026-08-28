@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 /* ---- Einstellungen ------------------------------------------------- */
 const QUELLE = '';                       // z. B. 'https://…/abfuhrtermine.ics'
+                                         // webcal://… geht auch
 const HOSTS  = [];                       // erlaubte Rechnernamen, leer = der aus QUELLE
 const FRISCH = 43200;                    // Zwischenspeicher zwölf Stunden
 const ANZAHL = 6;                        // so viele kommende Termine ausgeben
@@ -35,7 +36,9 @@ if (is_file($cache) && time() - (int) filemtime($cache) < FRISCH) {
 
 $ics = '';
 if (QUELLE !== '') {
-    $teil = parse_url(QUELLE);
+    // Abo-Verweise stehen oft als webcal:// da - das ist https mit anderem Namen
+    $adresse = preg_replace('#^webcal://#i', 'https://', QUELLE);
+    $teil = parse_url($adresse);
     $host = $teil['host'] ?? '';
     $erlaubt = HOSTS === [] ? [$host] : HOSTS;
     // Nur https und nur der eingetragene Rechner - kein offener Weiterleiter
@@ -49,7 +52,7 @@ if (QUELLE !== '') {
         'header'  => "User-Agent: Startseite/1.0\r\n",
         'follow_location' => 1, 'max_redirects' => 3,
     ]]);
-    $ics = (string) @file_get_contents(QUELLE, false, null, $ctx);
+    $ics = (string) @file_get_contents($adresse, false, null, $ctx);
 } elseif (is_file($lokal)) {
     $ics = (string) file_get_contents($lokal);
 }

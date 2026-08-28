@@ -137,7 +137,8 @@ Daten gibt – ohne Einrichtung bleibt die Seite unverändert.
 Die Daten kommen aus einem Abfuhrkalender im ICS-Format. Zwei Wege, je
 nachdem was die Gemeinde anbietet, beide in `api/muell.php` oben einstellbar:
 
-1. **Kalender-Adresse**: In `const QUELLE` die `https://…/….ics` eintragen.
+1. **Kalender-Adresse**: In `const QUELLE` die `https://…/….ics` eintragen
+   (ein `webcal://`-Abo-Verweis geht auch, er wird auf `https` umgesetzt).
    Die Datei wird alle zwölf Stunden geholt und in `api/muell.cache.json`
    zwischengespeichert. Aus Sicherheitsgründen sind nur `https` und der
    Rechner aus dieser Adresse erlaubt – der Endpunkt ist **kein** offener
@@ -149,9 +150,12 @@ nachdem was die Gemeinde anbietet, beide in `api/muell.php` oben einstellbar:
 Gelesen werden je Termin nur Datum (`DTSTART`) und Bezeichnung (`SUMMARY`);
 Vergangenes fällt weg, die nächsten sechs Termine gehen an die Seite.
 
-Wo Seekirchen den Kalender veröffentlicht, muss man einmal nachsehen –
-üblich sind die Gemeinde-Website unter „Abfall" oder das Abfall-Portal des
-Bezirks. Beides führt meist auf einen ICS-Verweis oder einen Export-Knopf.
+**Für Seekirchen am Wallersee** führt der Weg über
+<https://www.seekirchen.at/abfallkalender> (GEM2GO/RiS-Kommunal): dort Straße
+und Hausnummer wählen, dann steht unter *Ihre Termine im Überblick* der
+iCal-Verweis. Weil die Termine je Adresse verschieden sind, hängt die
+Kalender-Adresse an genau dieser Auswahl – sie lässt sich nicht allgemein
+angeben.
 
 ### Zum Startbildschirm hinzufügen
 
