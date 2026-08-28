@@ -35,6 +35,74 @@ if "%SFTP_USER%"=="" (
   exit /b 1
 )
 
+rem ---------------------------------------------------------------
+rem  Vor der Uebertragung fragen, ob der Stand von GitHub geholt
+rem  werden soll - sonst landet leicht eine alte Fassung auf dem
+rem  Webspace. In deploy.config.bat laesst sich das mit
+rem      set "GIT_PULL=ja"   bzw.   set "GIT_PULL=nein"
+rem  fest vorgeben, dann wird nicht gefragt.
+rem ---------------------------------------------------------------
+where git >nul 2>&1
+if errorlevel 1 goto :nachpull
+git -C "%ROOT%" rev-parse --is-inside-work-tree >nul 2>&1
+if errorlevel 1 goto :nachpull
+
+set "ZWEIG="
+for /f "delims=" %%B in ('git -C "%ROOT%" rev-parse --abbrev-ref HEAD 2^>nul') do set "ZWEIG=%%B"
+if "!ZWEIG!"=="" set "ZWEIG=main"
+rem Losgeloester HEAD: dann gibt es keinen Zweig zum Nachziehen
+if /i "!ZWEIG!"=="HEAD" (
+  echo.
+  echo === Git ===
+  echo   Kein Zweig ausgecheckt - Aktualisieren wird uebersprungen.
+  goto :nachpull
+)
+
+echo.
+echo === Git ===
+echo   Ordner: %ROOT%
+echo   Zweig:  !ZWEIG!
+set "SCHMUTZ="
+for /f "delims=" %%C in ('git -C "%ROOT%" status --porcelain 2^>nul') do set "SCHMUTZ=1"
+if defined SCHMUTZ echo   Hinweis: es gibt eigene, nicht eingecheckte Aenderungen.
+
+if /i "!GIT_PULL!"=="nein" (
+  echo   Aktualisieren uebersprungen ^(GIT_PULL=nein^).
+  goto :nachpull
+)
+if /i "!GIT_PULL!"=="ja" goto :pullen
+
+set "ANTWORT="
+set /p "ANTWORT=  Vorher von GitHub aktualisieren? [J/n] "
+if not defined ANTWORT set "ANTWORT=J"
+if /i "!ANTWORT:~0,1!"=="n" (
+  echo   Uebertragen wird der Stand, der jetzt im Ordner liegt.
+  goto :nachpull
+)
+
+:pullen
+echo.
+echo   git pull --ff-only origin !ZWEIG!
+git -C "%ROOT%" pull --ff-only origin !ZWEIG!
+rem Rueckgabe sofort sichern - jeder weitere Befehl wuerde sie ueberschreiben
+set "PULLRC=!ERRORLEVEL!"
+if "!PULLRC!"=="0" (
+  for /f "delims=" %%H in ('git -C "%ROOT%" log -1 --oneline 2^>nul') do echo   Stand: %%H
+) else (
+  echo.
+  echo   Aktualisieren fehlgeschlagen. Ueblicher Grund: eigene Aenderungen
+  echo   im Ordner oder ein abweichender Verlauf. Mit  git status  nachsehen.
+  set "WEITER="
+  set /p "WEITER=  Trotzdem den Stand aus dem Ordner uebertragen? [j/N] "
+  if /i not "!WEITER:~0,1!"=="j" (
+    echo   Abgebrochen - es wurde nichts uebertragen.
+    pause
+    exit /b 1
+  )
+)
+
+:nachpull
+
 echo.
 echo === Dateien pruefen ===
 set "MISSING="

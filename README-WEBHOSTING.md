@@ -84,6 +84,24 @@ Repository.
 Danach genügt ein Doppelklick auf `deploy-sftp.bat`. Am Ende nennt es die
 Adresse und die Prüf-URL.
 
+**Vor der Übertragung fragt es, ob der Stand von GitHub geholt werden soll:**
+
+```
+=== Git ===
+  Ordner: C:\Users\…\offline-chess
+  Zweig:  main
+  Vorher von GitHub aktualisieren? [J/n]
+```
+
+Enter bedeutet ja; dann läuft `git pull --ff-only` und der neue Stand wird
+mit Kurzfassung angezeigt. Schlägt das fehl – meist wegen eigener Änderungen
+im Ordner –, fragt das Skript, ob trotzdem der vorhandene Stand hochgeladen
+werden soll, statt es stillschweigend zu tun. Ohne Git im System oder
+außerhalb eines Repositorys entfällt die Frage.
+
+Wer sie dauerhaft nicht will, trägt in `deploy.config.bat`
+`set "GIT_PULL=ja"` oder `set "GIT_PULL=nein"` ein.
+
 Voraussetzung ist eines von beidem:
 
 - **OpenSSH-Client** – in Windows 10/11 meist vorhanden und der bevorzugte
