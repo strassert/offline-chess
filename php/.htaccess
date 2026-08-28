@@ -2,11 +2,16 @@
 # und der Browser lädt sie langsamer oder gar nicht.
 AddType application/wasm .wasm
 
+# Ohne diesen Eintrag halten manche Server das Manifest fuer eine
+# Textdatei - "Zum Startbildschirm" bietet der Browser dann nicht an.
+AddType application/manifest+json .webmanifest
+
 # Engine-Dateien ändern sich nie – lange vorhalten, Seite dagegen frisch holen
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresByType application/wasm "access plus 7 days"
   ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/png "access plus 7 days"
   ExpiresByType text/html "access plus 0 seconds"
 </IfModule>
 

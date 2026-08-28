@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Seekirchen</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#20232a">
+<link rel="icon" href="icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Seekirchen">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root{
     --bg:#20232a; --card:#2b2f38; --card2:#1c1f26; --text:#f2efe7;
@@ -34,82 +41,110 @@
   h2{margin:0 0 12px; font-size:13px; letter-spacing:.08em;
     text-transform:uppercase; opacity:.5; font-weight:700;}
 
-  /* ---------- Wetter ---------- */
-  .wx{margin-bottom:clamp(14px,2.5vw,22px);}
-  .wxmain{display:grid; gap:clamp(14px,2.5vw,24px);
-    grid-template-columns:minmax(200px,320px) 1fr; align-items:center;}
-  .wxnow{display:flex; align-items:center; gap:14px;}
-  .wxnow .ico{width:clamp(64px,13vw,92px); height:clamp(64px,13vw,92px); flex:0 0 auto;}
-  .temp{font-size:clamp(38px,9vw,56px); font-weight:700; line-height:1;
+  /* ---------- Wetter: eine Zeile ----------
+     Das Wetter ist Beiwerk, die Apps sind der Zweck der Seite. Deshalb steht
+     hier nur das Nötige; Stunden, Woche und Nebenwerte klappt auf, wer sie
+     sehen will - die Einstellung merkt sich der Browser. */
+  .wx{padding:12px clamp(12px,2vw,16px);}
+  .wxbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .wxbar .ico{width:44px; height:44px; flex:0 0 auto;}
+  .temp{font-size:30px; font-weight:700; line-height:1;
     font-variant-numeric:tabular-nums;}
-  .cond{font-size:15px; opacity:.8; margin-top:2px;}
-  .feels{font-size:13px; opacity:.5;}
+  .wxtxt{min-width:120px;}
+  .cond{font-size:14px;}
+  .feels{font-size:12px; opacity:.5;}
+  .kurz{flex:1; display:flex; gap:16px; flex-wrap:wrap; justify-content:flex-end;
+    font-size:13px; opacity:.65; font-variant-numeric:tabular-nums;}
+  .kurz b{font-weight:700; opacity:1;}
+  .klapp{background:none; border:1px solid var(--line); color:var(--text);
+    opacity:.6; border-radius:7px; padding:5px 10px; font-size:12px; cursor:pointer;
+    flex:0 0 auto;}
+  .klapp:hover{opacity:1;}
+  .mehr{margin-top:12px; border-top:1px solid var(--line); padding-top:12px;}
+  .mehr[hidden]{display:none;}
   .facts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
   @media (max-width:420px){ .facts{grid-template-columns:repeat(2,1fr);} }
-  .fact{background:var(--card2); border-radius:10px; padding:9px 11px;}
+  .fact{background:var(--card2); border-radius:10px; padding:8px 10px;}
   .fact .k{font-size:11px; letter-spacing:.05em; text-transform:uppercase; opacity:.45;}
-  .fact .v{font-size:16px; font-weight:700; font-variant-numeric:tabular-nums;
+  .fact .v{font-size:15px; font-weight:700; font-variant-numeric:tabular-nums;
     white-space:nowrap;}
   .fact .v small{font-size:12px; font-weight:400; opacity:.6;}
 
   /* Stundenstreifen: rollt seitwärts, rastet an den Stunden ein */
   .hours{display:flex; gap:6px; overflow-x:auto; scroll-snap-type:x proximity;
-    margin-top:clamp(14px,2.5vw,20px); padding-bottom:4px;}
-  .hour{flex:0 0 auto; width:66px; text-align:center; scroll-snap-align:start;
-    background:var(--card2); border-radius:10px; padding:8px 4px;}
+    margin-top:12px; padding-bottom:4px;}
+  .hour{flex:0 0 auto; width:60px; text-align:center; scroll-snap-align:start;
+    background:var(--card2); border-radius:10px; padding:7px 4px;}
   .hour.now{box-shadow:inset 0 0 0 1px var(--accent);}
-  .hour .h{font-size:12px; opacity:.55; font-variant-numeric:tabular-nums;}
-  .hour svg{width:26px; height:26px; margin:3px auto 1px; display:block;}
-  .hour .t{font-size:15px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .hour .h{font-size:11px; opacity:.55; font-variant-numeric:tabular-nums;}
+  .hour svg{width:24px; height:24px; margin:3px auto 1px; display:block;}
+  .hour .t{font-size:14px; font-weight:700; font-variant-numeric:tabular-nums;}
   .hour .p{font-size:11px; color:var(--cold); min-height:15px;
     font-variant-numeric:tabular-nums;}
 
   /* Wochenliste mit Temperaturbalken */
-  .days{margin-top:clamp(14px,2.5vw,20px); border-top:1px solid var(--line);}
-  .dayrow{display:grid; gap:9px; align-items:center; padding:8px 2px;
-    grid-template-columns:44px 26px 40px 1fr 34px 34px;
+  .days{margin-top:12px; border-top:1px solid var(--line);}
+  .dayrow{display:grid; gap:9px; align-items:center; padding:6px 2px;
+    grid-template-columns:44px 24px 40px 1fr 32px 32px;
     border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;}
   .dayrow:last-child{border-bottom:0;}
-  .dayrow svg{width:24px; height:24px; display:block;}
-  .dn{font-size:14px; font-weight:600;}
+  .dayrow svg{width:22px; height:22px; display:block;}
+  .dn{font-size:13px; font-weight:600;}
   .dn.we{color:var(--warn);}
   .rain{font-size:12px; color:var(--cold); text-align:right;}
-  .lo{font-size:14px; opacity:.5; text-align:right;}
-  .hi{font-size:14px; font-weight:700; text-align:right;}
+  .lo{font-size:13px; opacity:.5; text-align:right;}
+  .hi{font-size:13px; font-weight:700; text-align:right;}
   .range{position:relative; height:6px; border-radius:3px; background:var(--card2);}
   .range .bar{position:absolute; top:0; bottom:0; border-radius:3px;
     background:linear-gradient(90deg,var(--cold),var(--warn),var(--hot));}
   @media (max-width:420px){
-    .dayrow{grid-template-columns:40px 24px 36px 1fr 30px 30px; gap:6px;}
+    .dayrow{grid-template-columns:40px 22px 36px 1fr 30px 30px; gap:6px;}
+    .kurz{justify-content:flex-start; gap:12px;}
   }
 
+  /* ---------- Abfuhr ---------- */
+  .ab{margin-top:clamp(10px,1.6vw,14px); padding:10px clamp(12px,2vw,16px);}
+  .abbar{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .ablbl{font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    opacity:.45; flex:0 0 auto;}
+  .abzeile{display:flex; gap:18px; flex-wrap:wrap; font-size:13px; opacity:.75;}
+  .abzeile b{font-weight:700; opacity:1;}
+  .abzeile .bald b{color:var(--warn);}
+
   /* ---------- Apps ---------- */
-  .appgrid{display:grid; gap:12px;
-    grid-template-columns:repeat(auto-fill,minmax(230px,1fr));}
-  .app{display:flex; gap:13px; align-items:flex-start; text-decoration:none;
-    color:inherit; background:var(--card2); border-radius:12px; padding:14px;
+  .apps{margin-top:clamp(12px,2vw,18px); padding:clamp(16px,2.6vw,24px);}
+  .appgrid{display:grid; gap:14px;
+    grid-template-columns:repeat(auto-fill,minmax(250px,1fr));}
+  .app{display:flex; gap:16px; align-items:center; text-decoration:none;
+    color:inherit; background:var(--card2); border-radius:14px;
+    padding:20px 18px; min-height:104px;
     border:1px solid transparent; transition:border-color .15s, transform .15s;}
   .app:hover{border-color:var(--accent); transform:translateY(-2px);}
   .app:active{transform:translateY(0);}
-  .app .badge{width:44px; height:44px; border-radius:10px; flex:0 0 auto;
+  .app .badge{width:56px; height:56px; border-radius:13px; flex:0 0 auto;
     display:flex; align-items:center; justify-content:center; background:#343a45;}
-  .app .badge svg{width:28px; height:28px;}
-  .app .nm{font-size:16px; font-weight:700;}
-  .app .ds{font-size:12px; opacity:.6; line-height:1.35;}
-  .app.soon{border:1px dashed var(--line); background:none; opacity:.5;
+  .app .badge svg{width:34px; height:34px;}
+  .app .nm{font-size:18px; font-weight:700;}
+  .app .ds{font-size:13px; opacity:.6; line-height:1.4; margin-top:2px;}
+  .app.soon{border:1px dashed var(--line); background:none; opacity:.45;
     cursor:default;}
   .app.soon:hover{transform:none; border-color:var(--line);}
+  .app.soon .badge{background:none; box-shadow:inset 0 0 0 1px var(--line);
+    font-size:22px; opacity:.7;}
+  .app.add{border:1px solid var(--line); background:none; cursor:pointer;
+    text-align:left; font:inherit; color:inherit; width:100%;}
+  .app.add .badge{background:none; box-shadow:inset 0 0 0 1px var(--accent);
+    color:var(--accent); font-size:26px;}
 
   /* ---------- Verbindung ---------- */
-  .net{margin-top:clamp(14px,2.5vw,22px);}
-  .netgrid{display:grid; gap:10px; grid-template-columns:2fr 1fr;}
-  .nb{background:var(--card2); border-radius:10px; padding:10px 12px;}
-  .nb .k{font-size:11px; letter-spacing:.05em; text-transform:uppercase; opacity:.45;}
-  .nb .v{font-size:15px; font-weight:700; font-variant-numeric:tabular-nums;}
-  .nb .s{font-size:12px; opacity:.5; font-variant-numeric:tabular-nums;}
+  .net{margin-top:clamp(12px,2vw,18px); padding:12px clamp(12px,2vw,16px);}
+  .netbar{display:flex; align-items:center; gap:12px;}
+  .nsum{flex:1; font-size:13px; opacity:.7; font-variant-numeric:tabular-nums;}
+  .nsum b{font-weight:700; opacity:1;}
+  .nsub{font-size:12px; opacity:.5; margin-top:8px; font-variant-numeric:tabular-nums;}
   /* Balken zeigt, worin die Ladezeit steckt: Auflösung, Verbindung, Warten … */
   .bars{display:flex; height:8px; border-radius:4px; overflow:hidden;
-    margin-top:8px; background:#141821;}
+    background:#141821;}
   .bars i{display:block; height:100%;}
   .bars i:nth-child(1){background:#5b9ad5;} .bars i:nth-child(2){background:#7fd88f;}
   .bars i:nth-child(3){background:#c9a86a;} .bars i:nth-child(4){background:#f0c14b;}
@@ -125,7 +160,6 @@
   .hist div{display:flex; gap:14px;}
   .hist .w{min-width:104px;}
   .note{margin-top:10px; font-size:11px; opacity:.4; line-height:1.4;}
-  @media (max-width:520px){ .netgrid{grid-template-columns:1fr;} }
 
   /* ---------- Fuß ---------- */
   .foot{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
@@ -143,10 +177,7 @@
   .hours:empty{display:none;}
   .days:empty{display:none;}
 
-  @media (max-width:720px){
-    .wxmain{grid-template-columns:1fr;}
-    .wxnow{justify-content:flex-start;}
-  }
+
 </style>
 </head>
 <body>
@@ -161,50 +192,56 @@
     <div class="clock" id="clock">--:--</div>
   </div>
 
+  <!-- Wetter: eine Zeile. Alles Weitere erst auf Wunsch. -->
   <section class="card wx">
-    <h2>Wetter</h2>
     <div id="wxMsg"></div>
-    <div class="wxmain">
-      <div class="wxnow">
-        <div class="ico" id="wxIcon"></div>
-        <div>
-          <div class="temp skel" id="wxTemp">--°</div>
-          <div class="cond" id="wxCond">wird geladen …</div>
-          <div class="feels" id="wxFeels">&nbsp;</div>
-        </div>
+    <div class="wxbar">
+      <div class="ico" id="wxIcon"></div>
+      <div class="temp skel" id="wxTemp">--°</div>
+      <div class="wxtxt">
+        <div class="cond" id="wxCond">wird geladen …</div>
+        <div class="feels" id="wxFeels">&nbsp;</div>
       </div>
-      <div class="facts" id="wxFacts"></div>
+      <div class="kurz" id="wxKurz"></div>
+      <button class="klapp" id="wxKlapp" aria-expanded="false">mehr</button>
     </div>
-    <div class="hours" id="wxHours"></div>
-    <div class="days" id="wxDays"></div>
+    <div class="mehr" id="wxMehr" hidden>
+      <div class="facts" id="wxFacts"></div>
+      <div class="hours" id="wxHours"></div>
+      <div class="days" id="wxDays"></div>
+    </div>
   </section>
 
-  <section class="card">
+  <!-- Abfuhr: nur da, wenn es Termine gibt -->
+  <section class="card ab" id="abBox" hidden>
+    <div class="abbar">
+      <span class="ablbl">Abfuhr</span>
+      <div class="abzeile" id="abZeile"></div>
+    </div>
+  </section>
+
+  <!-- Apps: der Hauptinhalt der Seite -->
+  <section class="card apps">
     <h2>Apps</h2>
     <div class="appgrid" id="apps"></div>
   </section>
 
   <section class="card net">
-    <h2>Verbindung</h2>
-    <div class="netgrid">
-      <div class="nb">
-        <div class="k">Seitenaufruf</div>
-        <div class="v" id="nvSum">wird ermittelt …</div>
-        <div class="bars" id="nvBars"></div>
-      </div>
-      <div class="nb">
-        <div class="k">Antwortzeit</div>
-        <div class="v" id="nvPing">…</div>
-        <div class="s" id="nvPingS">&nbsp;</div>
-      </div>
+    <div class="netbar">
+      <div class="nsum" id="nvSum">Verbindung wird gemessen …</div>
+      <button class="klapp" id="npKlapp" aria-expanded="false">mehr</button>
     </div>
-    <div class="speed">
-      <button class="sbtn" id="spBtn">Geschwindigkeit messen</button>
-      <div class="sres" id="spRes">Lädt rund 16 MB herunter und 12 MB hinauf.</div>
+    <div class="mehr" id="npMehr" hidden>
+      <div class="bars" id="nvBars"></div>
+      <div class="nsub" id="nvPingS">&nbsp;</div>
+      <div class="speed">
+        <button class="sbtn" id="spBtn">Geschwindigkeit messen</button>
+        <div class="sres" id="spRes">Lädt rund 16 MB herunter und 12 MB hinauf.</div>
+      </div>
+      <div class="hist" id="spHist"></div>
+      <div class="note">Gemessen wird der Weg zu diesem Server – eine Untergrenze,
+        kein Ersatz für einen Anbieter-Test.</div>
     </div>
-    <div class="hist" id="spHist"></div>
-    <div class="note">Gemessen wird der Weg zu diesem Server – eine Untergrenze,
-      kein Ersatz für einen Anbieter-Test.</div>
   </section>
 
   <div class="foot">
@@ -328,7 +365,7 @@ function zeigeApps(){
       '<span class="badge">'+(APPICON[a.icon]||'')+'</span>'+
       '<span><span class="nm">'+a.name+'</span>'+
       '<div class="ds">'+a.text+'</div></span></a>').join('')+
-    '<div class="app soon"><span class="badge">+</span>'+
+    '<div class="app soon"><span class="badge">＋</span>'+
     '<span><span class="nm">Weitere folgen</span>'+
     '<div class="ds">Platz für die nächste Anwendung.</div></span></div>';
 }
@@ -338,6 +375,14 @@ function zeigeApps(){
    aus dem Browser. Die letzte gelungene Antwort wird im Browser
    abgelegt: Ist der Dienst gerade nicht erreichbar, steht wenigstens
    der letzte Stand da - mit Angabe, wie alt er ist. */
+/* Zugriff mit Zeitgrenze - ohne sie kann ein Abruf ewig offen bleiben */
+function fetchT(url,opt,ms){
+  const ac=new AbortController();
+  const t=setTimeout(()=>ac.abort(),ms||8000);
+  return fetch(url,Object.assign({signal:ac.signal},opt||{}))
+    .finally(()=>clearTimeout(t));
+}
+
 const API='https://api.open-meteo.com/v1/forecast';
 const FELDER=
   '&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,'+
@@ -398,8 +443,17 @@ function zeigeWetter(hinweis){
   temp.textContent=num(c.temperature_2m)+'°';
   temp.classList.remove('skel');
   el('wxCond').textContent=w.t;
-  el('wxFeels').textContent='gefühlt '+num(c.apparent_temperature)+'°  ·  '+
-    'heute '+num(d.temperature_2m_min[0])+'° bis '+num(d.temperature_2m_max[0])+'°';
+  el('wxFeels').textContent='gefühlt '+num(c.apparent_temperature)+'°  ·  heute '+
+    num(d.temperature_2m_min[0])+'° bis '+num(d.temperature_2m_max[0])+'°';
+
+  /* Die Zeile trägt nur, was man im Vorbeigehen liest: Regen heute, Wind,
+     und wann die Sonne untergeht. Der Rest steckt im aufgeklappten Teil. */
+  const rp=d.precipitation_probability_max?d.precipitation_probability_max[0]:null;
+  el('wxKurz').innerHTML=[
+    ['Regen', (rp===null||rp===undefined)?'–':rp+' %'],
+    ['Wind', num(c.wind_speed_10m)+' km/h'],
+    ['Sonne bis', uhr(d.sunset&&d.sunset[0])]
+  ].map(f=>'<span>'+f[0]+' <b>'+f[1]+'</b></span>').join('');
 
   const wind=num(c.wind_speed_10m)+' km/h', boe=c.wind_gusts_10m;
   el('wxFacts').innerHTML=[
@@ -479,11 +533,53 @@ function zahl(v){ return komma(v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(
 function kbyte(b){ return komma(b>=MB?(b/MB).toFixed(1)+' MB'
                                      :(b/1024).toFixed(1)+' KB'); }
 
+/* ---------- Abfuhrtermine ----------
+   Kommt von api/muell.php (liest den Abfuhrkalender der Gemeinde). Fehlt der
+   Endpunkt oder ist er nicht eingerichtet, bleibt die Zeile einfach weg -
+   eine leere Karte hilft niemandem. */
+function tagText(iso){
+  const d=new Date(iso+'T12:00:00'), h=new Date(); h.setHours(12,0,0,0);
+  const tage=Math.round((d-h)/86400000);
+  if(tage<=0) return 'heute';
+  if(tage===1) return 'morgen';
+  if(tage===2) return 'übermorgen';
+  return WOCHE[d.getDay()]+' '+d.getDate()+'.'+(d.getMonth()+1)+'.';
+}
+async function muell(){
+  let j=null;
+  try{
+    const r=await fetchT('api/muell.php',{cache:'no-store'},8000);
+    if(!r.ok) return;                       // nicht hochgeladen: still bleiben
+    j=await r.json();
+  }catch(e){ return; }
+  if(!j||!j.termine||!j.termine.length) return;
+  el('abZeile').innerHTML=j.termine.slice(0,4).map(t=>{
+    const d=new Date(t.d+'T12:00:00'), h=new Date(); h.setHours(12,0,0,0);
+    const bald=(d-h)<=86400000*2;
+    return '<span'+(bald?' class="bald"':'')+'>'+esc(t.t)+' <b>'+
+           tagText(t.d)+'</b></span>';
+  }).join('');
+  el('abBox').hidden=false;
+}
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* Kopfzeile der Verbindungskarte: knapp, beide Werte in einer Zeile */
+const Nv={ladung:null, ping:null, groesse:0, teile:'', pingS:''};
+function zeigeNet(){
+  const t=[];
+  t.push('Aufruf '+(Nv.ladung===null?'…':'<b>'+Math.round(Nv.ladung)+' ms</b>'));
+  t.push('Antwort '+(Nv.ping===null?'…':'<b>'+Math.round(Nv.ping)+' ms</b>'));
+  if(Nv.groesse) t.push(kbyte(Nv.groesse));
+  el('nvSum').innerHTML=t.join(' · ');
+  el('nvPingS').textContent=[Nv.teile,Nv.pingS].filter(Boolean).join('  ·  ');
+}
+
 /* 1. Aufschlüsselung des eigenen Seitenaufrufs */
 function ladung(){
   const n=(performance.getEntriesByType&&
            performance.getEntriesByType('navigation')[0])||null;
-  if(!n||!n.responseEnd){ el('nvSum').textContent='vom Browser nicht gemeldet'; return; }
+  if(!n||!n.responseEnd){ Nv.teile='vom Browser nicht gemeldet'; zeigeNet(); return; }
   const dns=n.domainLookupEnd-n.domainLookupStart;
   const tcp=(n.secureConnectionStart>0?n.secureConnectionStart:n.connectEnd)-n.connectStart;
   const tls=n.secureConnectionStart>0?(n.connectEnd-n.secureConnectionStart):0;
@@ -492,10 +588,9 @@ function ladung(){
   const ms=v=>Math.max(0,Math.round(v))+' ms';
   const teile=[['DNS',dns],['Verbindung',tcp],['TLS',tls],['Antwort',wait],
                ['Übertragung',load]];
-  el('nvSum').textContent=
-    teile.filter(t=>t[1]>0.5).map(t=>t[0]+' '+ms(t[1])).join(' · ')+
-    '  ·  fertig nach '+ms(n.responseEnd)+
-    (n.transferSize?('  ·  '+kbyte(n.transferSize)):'');
+  Nv.ladung=n.responseEnd; Nv.groesse=n.transferSize||0;
+  Nv.teile=teile.filter(t=>t[1]>0.5).map(t=>t[0]+' '+ms(t[1])).join(' · ');
+  zeigeNet();
   const ganz=Math.max(1,dns+tcp+tls+wait+load);
   el('nvBars').innerHTML=teile.map(t=>
     '<i style="width:'+(t[1]/ganz*100).toFixed(1)+'%" title="'+t[0]+' '+ms(t[1])+
@@ -514,12 +609,12 @@ async function antwortzeit(n){
     }catch(e){}
     await new Promise(r=>setTimeout(r,120));
   }
-  if(!werte.length){ el('nvPing').textContent='keine Antwort'; return; }
+  if(!werte.length){ Nv.pingS='keine Antwort'; zeigeNet(); return; }
   werte.sort((a,b)=>a-b);
-  const med=werte[werte.length>>1];
+  Nv.ping=werte[werte.length>>1];
   const spanne=(werte[werte.length-1]-werte[0])/2;
-  el('nvPing').textContent=Math.round(med)+' ms';
-  el('nvPingS').textContent='Median aus '+werte.length+' · ±'+Math.round(spanne)+' ms';
+  Nv.pingS='Median aus '+werte.length+' · ±'+Math.round(spanne)+' ms';
+  zeigeNet();
 }
 
 /* 3a. Download. Als Last dient die Engine-Datei, die ohnehin auf dem Server
@@ -693,10 +788,65 @@ document.addEventListener('visibilitychange',()=>{
 });
 window.addEventListener('online',holen);
 
+/* Auf- und Zuklappen. Was einmal offen war, bleibt beim nächsten Besuch offen. */
+function klapper(knopf,teil,name){
+  const b=el(knopf), t=el(teil);
+  const setze=(auf)=>{
+    t.hidden=!auf;
+    b.textContent=auf?'weniger':'mehr';
+    b.setAttribute('aria-expanded',auf?'true':'false');
+    try{ localStorage.setItem('auf.'+name,auf?'1':'0'); }catch(e){}
+  };
+  let auf=false;
+  try{ auf=localStorage.getItem('auf.'+name)==='1'; }catch(e){}
+  setze(auf);
+  b.addEventListener('click',()=>setze(t.hidden));
+}
+klapper('wxKlapp','wxMehr','wetter');
+klapper('npKlapp','npMehr','netz');
+muell();
+
+/* ---------- Zum Startbildschirm hinzufügen ----------
+   Android/Chrome meldet sich von selbst, sobald die Seite dafür taugt; dann
+   erscheint eine Kachel, die den Dialog öffnet. Apple kennt das nicht, dort
+   steht stattdessen der Weg über das Teilen-Menü. Läuft die Seite bereits
+   als App, ist beides überflüssig. */
+let installer=null;
+const alsApp=()=>matchMedia('(display-mode: standalone)').matches ||
+                 navigator.standalone===true;
+function zeigeInstall(text,tat){
+  if(document.getElementById('appAdd')) return;
+  const k=document.createElement(tat?'button':'div');
+  k.className='app add'; k.id='appAdd';
+  k.innerHTML='<span class="badge">＋</span><span>'+
+    '<span class="nm">Zum Startbildschirm</span>'+
+    '<div class="ds">'+text+'</div></span>';
+  if(tat) k.addEventListener('click',tat);
+  el('apps').appendChild(k);
+}
+window.addEventListener('beforeinstallprompt',(e)=>{
+  e.preventDefault(); installer=e;
+  zeigeInstall('Als App öffnen, ohne Adressleiste.',async()=>{
+    installer.prompt();
+    try{ await installer.userChoice; }catch(err){}
+    installer=null;
+    const k=document.getElementById('appAdd'); if(k) k.remove();
+  });
+});
+if(!alsApp() && /iPhone|iPad|iPod/.test(navigator.userAgent))
+  zeigeInstall('In Safari: Teilen ▸ „Zum Home-Bildschirm".',null);
+
+/* Dienstprogramm: hält die Seite auch ohne Netz vorführbar. Es fragt immer
+   zuerst den Server, damit keine alte Fassung hängen bleibt. */
+if('serviceWorker' in navigator && location.protocol!=='file:')
+  addEventListener('load',()=>navigator.serviceWorker.register('sw.js')
+    .catch(()=>{}));
+
 /* Verbindung: die beiden kostenlosen Messungen laufen von selbst,
    der Durchsatz nur auf Knopfdruck */
 el('spBtn').addEventListener('click',messen);
 verlauf(null);
+zeigeNet();
 addEventListener('load',()=>{ setTimeout(()=>{ ladung(); antwortzeit(7); },300); });
 </script>
 </body>

@@ -8,16 +8,17 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 | Datei | Zweck |
 |-------|-------|
 | `chess.html` | Das Spiel – vollständige Schachregeln, Zugliste, Undo, Brett drehen |
-| `dashboard.html` | Startseite fürs Webhosting: Wetter und Auswahl der Anwendungen (siehe [README-WEBHOSTING](README-WEBHOSTING.md#startseite)) |
+| `dashboard.html` | Startseite fürs Webhosting: Anwendungen, dazu Wetter und Abfuhrtermine (siehe [README-WEBHOSTING](README-WEBHOSTING.md#startseite)) |
+| `manifest.webmanifest`, `sw.js`, `icon-*.png` | damit die Startseite auf dem Handy als App abgelegt werden kann |
 | `response.asp` | Rückgabeseite für den Goform-Zugriff (**nur für PLC-Sync nötig**) |
 | `stockfish-18-lite-single.js` | Stockfish-Engine (Loader, 21 KB) – **nur für die Zuschauer-Analyse** |
 | `stockfish-18-lite-single.wasm` | Stockfish-Engine (7,3 MB) – dito |
+| `PV_Access.js` | B&R-Original-Bibliothek für PV-Zugriff (Referenz; `chess.html` bringt die Logik selbst mit) |
+| `pvtest.html` | Diagnoseseite, die verschiedene Goform-Request-Formate durchprobiert |
 
 Die Eröffnungsdatenbank (2833 Eröffnungen, Quelle
 [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
 CC0) steckt komprimiert in `chess.html` – keine zusätzliche Datei nötig.
-| `PV_Access.js` | B&R-Original-Bibliothek für PV-Zugriff (Referenz; `chess.html` bringt die Logik selbst mit) |
-| `pvtest.html` | Diagnoseseite, die verschiedene Goform-Request-Formate durchprobiert |
 
 ## Deployment
 

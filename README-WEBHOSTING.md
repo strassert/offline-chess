@@ -10,8 +10,10 @@ Getestet gegen Apache 2 mit PHP/FPM (z. B. cablelink `[CL MSP] Linux`).
 
 | Datei | Ziel | Größe |
 |-------|------|-------|
-| `dashboard.html` | Wurzel als `index.html` | 30 KB |
+| `dashboard.html` | Wurzel als `index.html` | 35 KB |
 | `chess.html` | Wurzel | ~175 KB |
+| `manifest.webmanifest`, `sw.js` | Wurzel – für „Zum Startbildschirm" | 2 KB |
+| `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Wurzel | 23 KB |
 | `stockfish-18-lite-single.js` | Wurzel | 21 KB |
 | `stockfish-18-lite-single.wasm` | Wurzel | 7,3 MB |
 | `php/.htaccess` | Wurzel als `.htaccess` | 1 KB |
@@ -25,6 +27,9 @@ Ergebnis auf dem Webspace:
 /                        (Wurzel des Uploads)
 ├── index.html           (die umbenannte dashboard.html – Startseite)
 ├── chess.html           (das Spiel)
+├── manifest.webmanifest
+├── sw.js
+├── icon-192.png, icon-512.png, apple-touch-icon.png
 ├── stockfish-18-lite-single.js
 ├── stockfish-18-lite-single.wasm
 ├── .htaccess
@@ -32,6 +37,7 @@ Ergebnis auf dem Webspace:
     ├── .htaccess
     ├── health.php
     ├── hist.php
+    ├── muell.php
     ├── reset.php
     ├── speed.php
     └── state.php
@@ -90,15 +96,17 @@ Voraussetzung ist eines von beidem:
 
 ## Startseite
 
-`dashboard.html` liegt als `index.html` in der Wurzel und zeigt zweierlei:
-das Wetter für Seekirchen am Wallersee und die Auswahl der Anwendungen.
-Wie das Spiel ist es eine einzelne Datei ohne Abhängigkeiten und braucht
-kein PHP.
+`dashboard.html` liegt als `index.html` in der Wurzel. Den Platz bekommen
+die **Anwendungen**; Wetter und Abfuhr stehen als schmale Zeilen darüber und
+klappen auf, wer mehr sehen will – die Einstellung merkt sich der Browser.
+Wie das Spiel ist es eine einzelne Datei ohne Abhängigkeiten; PHP braucht
+davon nur die Abfuhrzeile.
 
 **Wetter** kommt von [Open-Meteo](https://open-meteo.com/) – frei nutzbar,
 ohne Schlüssel und ohne Anmeldung, direkt aus dem Browser des Besuchers
-abgefragt (der Webspace selbst holt nichts). Angezeigt werden der aktuelle
-Stand, die nächsten 24 Stunden und sieben Tage. Die letzte gelungene
+abgefragt (der Webspace selbst holt nichts). In der Zeile stehen Temperatur,
+Zustand, Regenwahrscheinlichkeit, Wind und Sonnenuntergang; aufgeklappt
+kommen die nächsten 24 Stunden, sieben Tage und die Nebenwerte dazu. Die letzte gelungene
 Antwort liegt im Browser; ist der Dienst gerade nicht erreichbar, bleibt
 dieser Stand mit Altersangabe stehen, statt die Seite leer zu lassen.
 Aufgefrischt wird alle 15 Minuten, beim Zurückkehren auf die Seite und über
@@ -119,6 +127,52 @@ const APPS=[
 
 Ein eigenes Sinnbild kommt als SVG in `APPICON` dazu; ohne Eintrag bleibt
 die Kachel einfach ohne Bild.
+
+### Abfuhrtermine
+
+Die Zeile **Abfuhr** unter dem Wetter zeigt die nächsten vier Termine; was
+in den nächsten zwei Tagen ansteht, ist gelb. Sie erscheint nur, wenn es
+Daten gibt – ohne Einrichtung bleibt die Seite unverändert.
+
+Die Daten kommen aus einem Abfuhrkalender im ICS-Format. Zwei Wege, je
+nachdem was die Gemeinde anbietet, beide in `api/muell.php` oben einstellbar:
+
+1. **Kalender-Adresse**: In `const QUELLE` die `https://…/….ics` eintragen.
+   Die Datei wird alle zwölf Stunden geholt und in `api/muell.cache.json`
+   zwischengespeichert. Aus Sicherheitsgründen sind nur `https` und der
+   Rechner aus dieser Adresse erlaubt – der Endpunkt ist **kein** offener
+   Weiterleiter.
+2. **Datei von Hand**: Kalender beim Abfallkalender der Gemeinde exportieren,
+   als `api/muell.ics` hochladen, `QUELLE` leer lassen. Einmal im Jahr
+   erneuern.
+
+Gelesen werden je Termin nur Datum (`DTSTART`) und Bezeichnung (`SUMMARY`);
+Vergangenes fällt weg, die nächsten sechs Termine gehen an die Seite.
+
+Wo Seekirchen den Kalender veröffentlicht, muss man einmal nachsehen –
+üblich sind die Gemeinde-Website unter „Abfall" oder das Abfall-Portal des
+Bezirks. Beides führt meist auf einen ICS-Verweis oder einen Export-Knopf.
+
+### Zum Startbildschirm hinzufügen
+
+Mit `manifest.webmanifest`, den drei Symbolen und `sw.js` lässt sich die
+Startseite auf Handy und Tablet wie eine App ablegen – ohne Adressleiste.
+
+- **Android/Chrome** bietet es von selbst an; zusätzlich erscheint in der
+  App-Auswahl eine Kachel *Zum Startbildschirm*.
+- **iPhone/iPad** kennt diesen Weg nicht; dort steht die Kachel als
+  Anleitung da: *Teilen ▸ Zum Home-Bildschirm*.
+- Läuft die Seite bereits als App, verschwindet die Kachel.
+
+`sw.js` fragt **immer zuerst den Server** und greift nur ohne Netz auf den
+Zwischenspeicher zurück. Eine neue Fassung ist damit sofort da; es kann
+keine alte hängen bleiben. Abrufe unter `api/` werden nie zwischengespeichert.
+
+Wichtig ist der MIME-Eintrag in der `.htaccess`
+(`AddType application/manifest+json .webmanifest`) – fehlt er, hält mancher
+Server das Manifest für Text und der Browser bietet das Ablegen nicht an.
+Und: **Das Ganze braucht HTTPS.** Über `http://` meldet sich kein
+Dienstprogramm an.
 
 ### Verbindungsmessung
 
@@ -198,4 +252,6 @@ merkbar.
 | „… (Schreiben 500)" | Schreibrechte auf `api/` fehlen, siehe `"writable"` in `health.php` |
 | Analyse bleibt aus | `.wasm` fehlt, wurde als Text übertragen, oder `.htaccess` mit `AddType application/wasm` fehlt |
 | „Upload nicht gemessen (api/speed.php fehlt)" | `speed.php` wurde nicht mit hochgeladen |
+| Abfuhr-Zeile fehlt | `muell.php` nicht hochgeladen, oder weder `QUELLE` gesetzt noch `api/muell.ics` vorhanden |
+| „Zum Startbildschirm" wird nicht angeboten | Seite über `http://` statt `https://` aufgerufen, oder der MIME-Eintrag für `.webmanifest` fehlt |
 | Startseite ohne Wetter | Besucher hat keinen Zugang zu `api.open-meteo.com` (Netzsperre, Werbeblocker); der Hinweis auf der Karte nennt den Grund |

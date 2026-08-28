@@ -1,5 +1,6 @@
-# Die Zustandsdatei gehört nicht ins Web – nur die PHP-Dateien lesen sie.
-<FilesMatch "\.(txt)$">
+# Zustand, Historie und Abfuhrkalender gehören nicht ins Web –
+# nur die PHP-Dateien lesen sie.
+<FilesMatch "\.(txt|ics|json)$">
   <IfModule mod_authz_core.c>
     Require all denied
   </IfModule>
