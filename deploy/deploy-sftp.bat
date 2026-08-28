@@ -38,7 +38,7 @@ if "%SFTP_USER%"=="" (
 echo.
 echo === Dateien pruefen ===
 set "MISSING="
-for %%F in (chess.html dashboard.html php\.htaccess php\api\state.php php\api\hist.php php\api\health.php php\api\reset.php php\api\.htaccess) do (
+for %%F in (chess.html dashboard.html php\.htaccess php\api\state.php php\api\hist.php php\api\speed.php php\api\health.php php\api\reset.php php\api\.htaccess) do (
   if not exist "%ROOT%\%%F" set "MISSING=!MISSING! %%F"
 )
 if not "!MISSING!"=="" (
@@ -94,6 +94,7 @@ if defined WITHENGINE (
 >> "%LIST%" echo lcd "%ROOT%\php\api"
 >> "%LIST%" echo put state.php
 >> "%LIST%" echo put hist.php
+>> "%LIST%" echo put speed.php
 >> "%LIST%" echo put health.php
 >> "%LIST%" echo put reset.php
 >> "%LIST%" echo put .htaccess .htaccess
@@ -141,6 +142,7 @@ if defined WITHENGINE (
 >> "%WS%" echo lcd "%ROOT%\php\api"
 >> "%WS%" echo put state.php
 >> "%WS%" echo put hist.php
+>> "%WS%" echo put speed.php
 >> "%WS%" echo put health.php
 >> "%WS%" echo put reset.php
 >> "%WS%" echo put .htaccess .htaccess

@@ -100,6 +100,33 @@
     cursor:default;}
   .app.soon:hover{transform:none; border-color:var(--line);}
 
+  /* ---------- Verbindung ---------- */
+  .net{margin-top:clamp(14px,2.5vw,22px);}
+  .netgrid{display:grid; gap:10px; grid-template-columns:2fr 1fr;}
+  .nb{background:var(--card2); border-radius:10px; padding:10px 12px;}
+  .nb .k{font-size:11px; letter-spacing:.05em; text-transform:uppercase; opacity:.45;}
+  .nb .v{font-size:15px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .nb .s{font-size:12px; opacity:.5; font-variant-numeric:tabular-nums;}
+  /* Balken zeigt, worin die Ladezeit steckt: Auflösung, Verbindung, Warten … */
+  .bars{display:flex; height:8px; border-radius:4px; overflow:hidden;
+    margin-top:8px; background:#141821;}
+  .bars i{display:block; height:100%;}
+  .bars i:nth-child(1){background:#5b9ad5;} .bars i:nth-child(2){background:#7fd88f;}
+  .bars i:nth-child(3){background:#c9a86a;} .bars i:nth-child(4){background:#f0c14b;}
+  .bars i:nth-child(5){background:#e07a5f;}
+  .speed{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px;}
+  .sbtn{background:var(--accent); color:#0e1a09; border:0; border-radius:9px;
+    padding:11px 16px; font-size:14px; font-weight:700; cursor:pointer;}
+  .sbtn:disabled{opacity:.5; cursor:progress;}
+  .sres{font-size:14px; opacity:.75; font-variant-numeric:tabular-nums;}
+  .sres b{font-size:17px; opacity:1;}
+  .hist{margin-top:10px; font-size:12px; opacity:.5; line-height:1.7;
+    font-variant-numeric:tabular-nums;}
+  .hist div{display:flex; gap:14px;}
+  .hist .w{min-width:104px;}
+  .note{margin-top:10px; font-size:11px; opacity:.4; line-height:1.4;}
+  @media (max-width:520px){ .netgrid{grid-template-columns:1fr;} }
+
   /* ---------- Fuß ---------- */
   .foot{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
     margin-top:clamp(14px,2.5vw,22px); font-size:12px; opacity:.5;}
@@ -155,6 +182,29 @@
   <section class="card">
     <h2>Apps</h2>
     <div class="appgrid" id="apps"></div>
+  </section>
+
+  <section class="card net">
+    <h2>Verbindung</h2>
+    <div class="netgrid">
+      <div class="nb">
+        <div class="k">Seitenaufruf</div>
+        <div class="v" id="nvSum">wird ermittelt …</div>
+        <div class="bars" id="nvBars"></div>
+      </div>
+      <div class="nb">
+        <div class="k">Antwortzeit</div>
+        <div class="v" id="nvPing">…</div>
+        <div class="s" id="nvPingS">&nbsp;</div>
+      </div>
+    </div>
+    <div class="speed">
+      <button class="sbtn" id="spBtn">Geschwindigkeit messen</button>
+      <div class="sres" id="spRes">Lädt rund 16 MB herunter und 12 MB hinauf.</div>
+    </div>
+    <div class="hist" id="spHist"></div>
+    <div class="note">Gemessen wird der Weg zu diesem Server – eine Untergrenze,
+      kein Ersatz für einen Anbieter-Test.</div>
   </section>
 
   <div class="foot">
@@ -246,7 +296,8 @@ function wetter(code,tag){
 
 /* ---------- Kleinkram ---------- */
 const el=(id)=>document.getElementById(id);
-const num=(v,n)=>(v===null||v===undefined||isNaN(v))?'–':(+v).toFixed(n||0);
+const num=(v,n)=>(v===null||v===undefined||isNaN(v))?'–'
+  :String((+v).toFixed(n||0)).replace('.',',');
 const WOCHE=['So','Mo','Di','Mi','Do','Fr','Sa'];
 const HIMMEL=['N','NO','O','SO','S','SW','W','NW'];
 function richtung(grad){
@@ -411,6 +462,214 @@ function alter(){
     : ('vor '+Math.round(s/3600)+' h'));
 }
 
+/* ---------- Verbindung ----------
+   Drei Dinge, streng getrennt:
+     1. Was der Aufruf DIESER Seite gekostet hat - der Browser hat es ohnehin
+        mitgeschrieben, das kostet kein einziges Byte extra.
+     2. Antwortzeit des Servers - ein paar Kopfabfragen, Median daraus.
+     3. Durchsatz - nur auf Knopfdruck, weil es am Datenvolumen zehrt.
+   Gemessen wird immer nur der Weg zu diesem Server. */
+const MB=1048576;
+const ZIEL_DL=16*MB, ZIEL_UL=12*MB, FRIST=12000;   // Menge und Zeitbudget
+const PARALLEL=4;                                  // eine Verbindung allein
+                                                   // schöpft schnelle Leitungen nicht aus
+function mbit(bytes,ms){ return ms>0 ? (bytes*8/1000/ms) : 0; }
+const komma=(s)=>String(s).replace('.',',');
+function zahl(v){ return komma(v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2)); }
+function kbyte(b){ return komma(b>=MB?(b/MB).toFixed(1)+' MB'
+                                     :(b/1024).toFixed(1)+' KB'); }
+
+/* 1. Aufschlüsselung des eigenen Seitenaufrufs */
+function ladung(){
+  const n=(performance.getEntriesByType&&
+           performance.getEntriesByType('navigation')[0])||null;
+  if(!n||!n.responseEnd){ el('nvSum').textContent='vom Browser nicht gemeldet'; return; }
+  const dns=n.domainLookupEnd-n.domainLookupStart;
+  const tcp=(n.secureConnectionStart>0?n.secureConnectionStart:n.connectEnd)-n.connectStart;
+  const tls=n.secureConnectionStart>0?(n.connectEnd-n.secureConnectionStart):0;
+  const wait=n.responseStart-n.requestStart;              // Wartezeit auf das erste Byte
+  const load=n.responseEnd-n.responseStart;
+  const ms=v=>Math.max(0,Math.round(v))+' ms';
+  const teile=[['DNS',dns],['Verbindung',tcp],['TLS',tls],['Antwort',wait],
+               ['Übertragung',load]];
+  el('nvSum').textContent=
+    teile.filter(t=>t[1]>0.5).map(t=>t[0]+' '+ms(t[1])).join(' · ')+
+    '  ·  fertig nach '+ms(n.responseEnd)+
+    (n.transferSize?('  ·  '+kbyte(n.transferSize)):'');
+  const ganz=Math.max(1,dns+tcp+tls+wait+load);
+  el('nvBars').innerHTML=teile.map(t=>
+    '<i style="width:'+(t[1]/ganz*100).toFixed(1)+'%" title="'+t[0]+' '+ms(t[1])+
+    '"></i>').join('');
+}
+
+/* 2. Antwortzeit: Kopfabfrage auf die eigene Seite, Median aus mehreren */
+async function antwortzeit(n){
+  const werte=[];
+  for(let i=0;i<(n||7);i++){
+    const t0=performance.now();
+    try{
+      await fetch(location.pathname+'?ping='+Date.now()+'.'+i,
+        {method:'HEAD',cache:'no-store'});
+      werte.push(performance.now()-t0);
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,120));
+  }
+  if(!werte.length){ el('nvPing').textContent='keine Antwort'; return; }
+  werte.sort((a,b)=>a-b);
+  const med=werte[werte.length>>1];
+  const spanne=(werte[werte.length-1]-werte[0])/2;
+  el('nvPing').textContent=Math.round(med)+' ms';
+  el('nvPingS').textContent='Median aus '+werte.length+' · ±'+Math.round(spanne)+' ms';
+}
+
+/* 3a. Download. Als Last dient die Engine-Datei, die ohnehin auf dem Server
+   liegt - erspart eine eigene Testdatei. Der Bereichskopf hält die Anfrage
+   klein, wo der Server ihn beachtet; wo nicht, wird einfach abgebrochen,
+   sobald genug Bytes da sind. */
+async function download(melde){
+  const kandidaten=['stockfish-18-lite-single.wasm','chess.html',location.pathname];
+  let quelle=null, groesse=0;
+  for(const k of kandidaten){
+    try{
+      const r=await fetch(k+'?p='+Date.now(),{method:'HEAD',cache:'no-store'});
+      if(!r.ok) continue;
+      const len=+(r.headers.get('content-length')||0);
+      if(len>groesse){ groesse=len; quelle=k; }
+      if(len>2*MB) break;                       // groß genug, nicht weitersuchen
+    }catch(e){}
+  }
+  if(!quelle) throw new Error('keine Datei zum Messen gefunden');
+
+  const ac=new AbortController();
+  const je=Math.max(MB,Math.ceil(ZIEL_DL/PARALLEL));
+  let bytes=0, erstes=0, fertig=0, gemeldet=0;
+  const stopp=setTimeout(()=>ac.abort(),FRIST);
+  const strom=async(i)=>{
+    const r=await fetch(quelle+'?p='+Date.now()+'.'+i,
+      {cache:'no-store',signal:ac.signal,headers:{'Range':'bytes=0-'+(je-1)}});
+    if(!r.ok&&r.status!==206) throw new Error('HTTP '+r.status);
+    const leser=r.body.getReader();
+    let eigen=0;
+    while(true){
+      const {done,value}=await leser.read();
+      if(done) break;
+      // Erst ab dem ersten Byte messen: davor liegen Aufbau und Wartezeit
+      if(!erstes) erstes=performance.now();
+      bytes+=value.length; eigen+=value.length; fertig=performance.now();
+      // Anzeige höchstens alle 150 ms auffrischen, sonst bremst sie die Messung
+      if(melde&&fertig-gemeldet>150){ gemeldet=fertig; melde(bytes,fertig-erstes); }
+      if(eigen>=je||bytes>=ZIEL_DL){ try{ leser.cancel(); }catch(e){} break; }
+    }
+  };
+  const pannen=[], laeufe=[];
+  for(let i=0;i<PARALLEL;i++) laeufe.push(strom(i).catch(e=>pannen.push(e)));
+  await Promise.all(laeufe);                    // Abbruch nach Frist ist in Ordnung
+  clearTimeout(stopp); try{ ac.abort(); }catch(e){}
+  if(!bytes) throw pannen[0]||new Error('keine Daten empfangen');
+  const dauer=Math.max(1,fertig-erstes);
+  return {bytes:bytes, ms:dauer, rate:mbit(bytes,dauer), quelle:quelle};
+}
+
+/* 3b. Upload gegen api/speed.php - der Endpunkt zählt nur und wirft weg.
+   XMLHttpRequest statt fetch, weil nur er den Sendefortschritt meldet. */
+function senden(blob,ms){
+  return new Promise((ok,fehler)=>{
+    const x=new XMLHttpRequest();
+    x.open('POST','api/speed.php?p='+Date.now()+'.'+Math.random());
+    x.timeout=FRIST;
+    x.upload.onprogress=(e)=>{ if(ms) ms(e.loaded); };
+    x.onload=()=>x.status>=200&&x.status<300?ok(blob.size):fehler(new Error('HTTP '+x.status));
+    x.onerror=()=>fehler(new Error('Verbindung abgebrochen'));
+    x.ontimeout=()=>fehler(new Error('Zeitüberschreitung'));
+    x.send(blob);
+  });
+}
+async function upload(melde){
+  let grenze=4*MB;
+  try{
+    const r=await fetch('api/speed.php?p='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    if(j&&j.max) grenze=Math.min(grenze,Math.floor(j.max*0.9));
+  }catch(e){ throw new Error('api/speed.php fehlt'); }
+
+  // Zufallsdaten, damit unterwegs nichts komprimiert werden kann
+  const roh=new Uint8Array(MB);
+  for(let i=0;i<roh.length;i+=4096){
+    const s=crypto.getRandomValues(new Uint8Array(Math.min(4096,roh.length-i)));
+    roh.set(s,i);
+  }
+  let stueck=Math.min(MB,grenze), gesamt=0, zeit=0;
+  const t0=performance.now();
+  while(gesamt<ZIEL_UL && performance.now()-t0<FRIST){
+    // Drei Ströme je Runde; die letzte Runde nur noch so groß wie nötig
+    const proStrom=Math.min(stueck,
+                            Math.max(65536,Math.ceil((ZIEL_UL-gesamt)/3)));
+    const teile=[];
+    for(let rest=proStrom; rest>0; rest-=MB)
+      teile.push(rest>=MB ? roh : roh.subarray(0,rest));
+    const blob=new Blob(teile);
+    const r0=performance.now();
+    const runde=[];
+    for(let i=0;i<3;i++) runde.push(senden(blob,()=>{}));
+    await Promise.all(runde);
+    const dt=performance.now()-r0;
+    gesamt+=blob.size*3; zeit+=dt;
+    if(melde) melde(gesamt,zeit);
+    if(dt<1500 && stueck*2<=grenze) stueck*=2;   // schnelle Leitung: mehr auf einmal
+  }
+  return {bytes:gesamt, ms:Math.max(1,zeit), rate:mbit(gesamt,Math.max(1,zeit))};
+}
+
+/* Ablauf und Verlauf */
+function verlauf(eintrag){
+  let v=[];
+  try{ v=JSON.parse(localStorage.getItem('speed')||'[]'); }catch(e){}
+  if(eintrag){ v.unshift(eintrag); v=v.slice(0,5);
+               try{ localStorage.setItem('speed',JSON.stringify(v)); }catch(e){} }
+  el('spHist').innerHTML=v.map(e=>{
+    const d=new Date(e.t);
+    return '<div><span class="w">'+d.toLocaleDateString('de-AT',
+        {day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('de-AT',
+        {hour:'2-digit',minute:'2-digit'})+'</span>'+
+      '<span>↓ '+zahl(e.dl)+' Mbit/s</span>'+
+      '<span>'+(e.ul?('↑ '+zahl(e.ul)+' Mbit/s'):'↑ –')+'</span></div>';
+  }).join('');
+}
+let misst=false;
+async function messen(){
+  if(misst) return;
+  misst=true;
+  const knopf=el('spBtn'), aus=el('spRes');
+  knopf.disabled=true;
+  let dl=0, ul=0, dlB=0, ulB=0, hinweis='';
+  try{
+    aus.textContent='Download läuft …';
+    const d=await download((b,ms)=>{
+      aus.innerHTML='Download <b>'+zahl(mbit(b,ms))+' Mbit/s</b> · '+kbyte(b);
+    });
+    dl=d.rate; dlB=d.bytes;
+    aus.innerHTML='Download <b>'+zahl(dl)+' Mbit/s</b> · Upload läuft …';
+    try{
+      const u=await upload((b,ms)=>{
+        aus.innerHTML='Download <b>'+zahl(dl)+' Mbit/s</b> · Upload <b>'+
+          zahl(mbit(b,ms))+' Mbit/s</b>';
+      });
+      ul=u.rate; ulB=u.bytes;
+    }catch(e){ hinweis=' · Upload nicht gemessen ('+e.message+')'; }
+    // Übertragene Menge dazusagen - sie geht auf das Datenvolumen
+    aus.innerHTML='Download <b>'+zahl(dl)+' Mbit/s</b>'+
+      (ul?(' · Upload <b>'+zahl(ul)+' Mbit/s</b>'):'')+hinweis+
+      '<div style="font-size:12px;opacity:.55">übertragen: '+kbyte(dlB)+
+      ' herunter'+(ulB?(', '+kbyte(ulB)+' hinauf'):'')+'</div>';
+    verlauf({t:Date.now(), dl:dl, ul:ul});
+  }catch(e){
+    aus.textContent='Messung nicht möglich: '+e.message;
+  }finally{
+    misst=false; knopf.disabled=false;
+  }
+}
+
 /* ---------- Uhr und Auffrischen ---------- */
 function takt(){
   const n=new Date();
@@ -433,6 +692,12 @@ document.addEventListener('visibilitychange',()=>{
   if(!document.hidden && Date.now()-geholt>5*60*1000) holen();
 });
 window.addEventListener('online',holen);
+
+/* Verbindung: die beiden kostenlosen Messungen laufen von selbst,
+   der Durchsatz nur auf Knopfdruck */
+el('spBtn').addEventListener('click',messen);
+verlauf(null);
+addEventListener('load',()=>{ setTimeout(()=>{ ladung(); antwortzeit(7); },300); });
 </script>
 </body>
 </html>

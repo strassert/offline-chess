@@ -10,12 +10,12 @@ Getestet gegen Apache 2 mit PHP/FPM (z. B. cablelink `[CL MSP] Linux`).
 
 | Datei | Ziel | Größe |
 |-------|------|-------|
-| `dashboard.html` | Wurzel als `index.html` | 16 KB |
+| `dashboard.html` | Wurzel als `index.html` | 30 KB |
 | `chess.html` | Wurzel | ~175 KB |
 | `stockfish-18-lite-single.js` | Wurzel | 21 KB |
 | `stockfish-18-lite-single.wasm` | Wurzel | 7,3 MB |
 | `php/.htaccess` | Wurzel als `.htaccess` | 1 KB |
-| `php/api/*` | Unterordner `api/` | 3 KB |
+| `php/api/*` | Unterordner `api/` | 5 KB |
 
 Zusammen rund **7,5 MB** – passt in ein 100-MB-Kontingent.
 
@@ -33,6 +33,7 @@ Ergebnis auf dem Webspace:
     ├── health.php
     ├── hist.php
     ├── reset.php
+    ├── speed.php
     └── state.php
 ```
 
@@ -119,6 +120,35 @@ const APPS=[
 Ein eigenes Sinnbild kommt als SVG in `APPICON` dazu; ohne Eintrag bleibt
 die Kachel einfach ohne Bild.
 
+### Verbindungsmessung
+
+Die Karte **Verbindung** zeigt dreierlei, und die ersten beiden Punkte kosten
+so gut wie nichts:
+
+1. **Seitenaufruf** – wie sich die Ladezeit dieser Seite aufteilt (DNS,
+   Verbindung, TLS, Wartezeit aufs erste Byte, Übertragung). Die Zahlen
+   stehen im Browser ohnehin bereit (`performance`-Schnittstelle), es wird
+   nichts zusätzlich abgerufen.
+2. **Antwortzeit** – sieben Kopfabfragen auf die Seite selbst, angezeigt wird
+   der Median und die Schwankung. Ein paar hundert Bytes.
+3. **Durchsatz** – nur auf Knopfdruck: rund 16 MB herunter und 12 MB hinauf,
+   je mit einem Zeitbudget von 12 Sekunden. Die letzten fünf Messungen bleiben
+   im Browser stehen.
+
+Als Ladung dient beim Download die ohnehin vorhandene Engine-Datei; mit dem
+Bereichskopf (`Range`) werden davon 4 MB je Verbindung geholt, vier
+Verbindungen parallel – eine allein schöpft schnelle Leitungen nicht aus.
+Der Upload geht gegen `api/speed.php`, das die Daten nur zählt und
+wegwirft; **gespeichert wird nichts**. Grenze ist 8 MB je Anfrage bzw. was
+`post_max_size` zulässt.
+
+Fehlt `speed.php`, wird nur der Download gemessen und die Karte sagt es.
+
+Die Zahlen messen den Weg **zu diesem Server** – eine Untergrenze, kein
+Ersatz für einen Anbieter-Test: Ein Shared-Webspace teilt seine Anbindung
+mit anderen. Und pro Messung gehen rund 28 MB auf das Traffic-Kontingent,
+weshalb Punkt 3 bewusst nicht von selbst läuft.
+
 ## Unterordner
 
 Ein Upload nach `/schach/` funktioniert genauso – die Seite bestimmt ihren
@@ -128,6 +158,8 @@ Pfad selbst. Dann liegt `api/` unter `/schach/api/`.
 
 **Ohne Schutz kann jeder, der die Adresse kennt, in laufende Partien
 schreiben** – es gibt keine Anmeldung und keine serverseitige Zugprüfung.
+Dasselbe gilt für `api/speed.php`: Es speichert zwar nichts, nimmt aber
+Daten entgegen und verbraucht damit fremdes Kontingent.
 Bei öffentlich erreichbarem Webspace deshalb den vorbereiteten Abschnitt in
 der `.htaccess` einkommentieren:
 
@@ -165,4 +197,5 @@ merkbar.
 | „Historie kann nicht gespeichert werden (Lesen 404)" | `api/hist.php` wurde nicht mit hochgeladen |
 | „… (Schreiben 500)" | Schreibrechte auf `api/` fehlen, siehe `"writable"` in `health.php` |
 | Analyse bleibt aus | `.wasm` fehlt, wurde als Text übertragen, oder `.htaccess` mit `AddType application/wasm` fehlt |
+| „Upload nicht gemessen (api/speed.php fehlt)" | `speed.php` wurde nicht mit hochgeladen |
 | Startseite ohne Wetter | Besucher hat keinen Zugang zu `api.open-meteo.com` (Netzsperre, Werbeblocker); der Hinweis auf der Karte nennt den Grund |
