@@ -230,15 +230,46 @@ Plätze, Namen, Zuschauer, Zeitmodus, Restzeiten und Zugliste liegen
 gemeinsam in **einer** Variable:
 
 ```
-w=<id>:<Name>;b=<id>:<Name>;v=<id>:<Name>,…;tc=180+2;tw=<ms>;tb=<ms>;st=run;res=…|e2e4 e7e5
+w=<id>:<Name>;b=<id>:<Name>;tc=180+2;tw=<ms>;tb=<ms>;st=run;res=…;v=<id>:<Name>,…|~zrBQ0k
 ```
 
-Der Kopf ist rund 120 Zeichen lang, je Zuschauer kommen ~20 dazu (maximal
-8 Zuschauer werden übertragen), die Zugliste wächst um ~5 Zeichen pro Zug.
-Die Historie liegt seit ihrer Trennung nicht mehr hier drin.
+Der Kopf ist rund 60–80 Zeichen lang, je Zuschauer kommen ~20 dazu (maximal
+8 Zuschauer werden übertragen, ohne Zuschauer entfällt das Feld ganz). Die
+Historie liegt seit ihrer Trennung nicht mehr hier drin.
 
-**Empfohlen ist `STRING[2000]`.** Damit passt auch eine lange Partie mit
-voller Zuschauerliste: 120 Halbzüge ergeben rund 880 Zeichen.
+Die Zugliste wächst um **2 Zeichen je Halbzug**: Jedes Feld ist ein einziges
+Zeichen (Feldindex 0…63), bei einer Umwandlung kommt der Buchstabe des neuen
+Steins dazu. Das führende `~` kennzeichnet diese Schreibweise. Ausgeschrieben
+(`e2e4 e7e5`, 5 Zeichen je Halbzug) wird weiterhin gelesen, damit ein Client
+mit älterer Fassung nicht sofort aussteigt — geschrieben wird sie nicht mehr.
+
+**Empfohlen ist `STRING[2000]`.** 120 Halbzüge ergeben damit rund 320 Zeichen.
+
+#### Wenn der Stand trotzdem gekürzt wird
+
+Der Webserver der Steuerung bestätigt einen Schreibvorgang auch dann mit
+`200 OK`, wenn er den Wert unterwegs kürzt — die Goform-Schnittstelle
+begrenzt ihn in manchen AR-Versionen auf **255 Zeichen, unabhängig von der
+angelegten `STRING`-Länge**. Beide Clients sehen dann verschiedene Bretter,
+während die Verbindungsanzeige einwandfrei bleibt: Jede einzelne Anfrage ist
+schnell und erfolgreich.
+
+Die Anwendung erkennt das inzwischen selbst. Kommt der eigene Stand
+zeichengenau gekürzt zurück, steht in der Verbindungsanzeige
+
+```
+Stand wird gekürzt
+gChessState: nur 255 von 257 Zeichen kommen an
+```
+
+Die genannte Zahl ist die tatsächlich gemessene Obergrenze. Ist sie kleiner
+als die angelegte Variable, kürzt der Webserver, nicht die Variable — dann
+hilft kein Vergrößern. Gegenprobe: Die Historie liegt in `gChessHist`; wird
+sie über 255 Zeichen hinaus gespeichert, ist der Goform-Weg in Ordnung und
+die Variable `gChessState` ist zu klein angelegt.
+
+Mit 255 Zeichen reicht es für rund 90 Halbzüge (45 Züge) — mit der
+ausgeschriebenen Zugliste waren es 37.
 
 ### Voraussetzungen für `?plc`
 
@@ -252,8 +283,8 @@ voller Zuschauerliste: 120 Halbzüge ergeben rund 880 Zeichen.
 
 ### Funktionsweise der Synchronisation
 
-Der komplette Spielverlauf wird als Zugliste serialisiert (`e2e4 e7e5 g1f3`)
-und in der SPS-Variable abgelegt. Jeder Client schreibt nach seinem Zug und
+Der komplette Spielverlauf wird als Zugliste serialisiert (`~zrBQ0k`, siehe
+oben) und in der SPS-Variable abgelegt. Jeder Client schreibt nach seinem Zug und
 liest einmal pro Sekunde; bei einer Änderung baut er das Brett aus der
 Zugliste neu auf. Dadurch sehen beide Seiten immer dieselbe Stellung.
 

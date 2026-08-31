@@ -3799,6 +3799,7 @@ const Net={
   lastOk:0, lastTry:0, rtt:0, avg:0, queued:0,
   okR:0, badR:0, okW:0, badW:0,
   reconnect:null,              // vom Transport gesetzt
+  cut:null,                    // {pv,cap,need}: Stand passt nicht in die Variable
   readOk(ms){ this.okR++; this.lastOk=Date.now(); this.rtt=ms;
               this.avg=this.avg?Math.round(this.avg*0.7+ms*0.3):ms; },
   readFail(){ this.badR++; },
@@ -3806,6 +3807,9 @@ const Net={
   writeFail(){ this.badW++; },
   // Zustand ergibt sich aus dem Abstand zum letzten erfolgreichen Zugriff
   state(){
+    // Jede einzelne Anfrage ist schnell und erfolgreich - trotzdem kommt kein
+    // gemeinsamer Stand zustande. Das ist keine gute Verbindung.
+    if(this.cut) return 'down';
     if(!this.lastOk) return 'init';
     const age=Date.now()-this.lastOk;
     if(age>30000||Sync.fails>=6) return 'down';
@@ -3830,6 +3834,23 @@ function renderNet(){
   const txt=document.getElementById('netTxt');
   const sub=document.getElementById('netSub');
   dot.className='netdot '+st;
+  /* Sonderfall mit eigener Auskunft: Der Stand kommt gekürzt zurück. "Gestört"
+     würde hier in die Irre führen - an der Leitung ist nichts zu tun, jede
+     einzelne Anfrage ist schnell und erfolgreich. Genannt wird die gemessene
+     Zahl, nicht eine vermutete Ursache: Ob die Variable zu klein ist oder der
+     Webserver der Steuerung unterwegs kürzt, sieht man von hier aus nicht. */
+  if(Net.cut){
+    txt.textContent='Stand wird gekürzt';
+    sub.textContent=Net.cut.pv+': nur '+Net.cut.cap+' von '+Net.cut.need+
+                    ' Zeichen kommen an';
+    box.title=Net.mode+'\nDas Schreiben wird bestätigt, zurück kommen aber nur '+
+              Net.cut.cap+' Zeichen - der Rest der Partie geht verloren, und '+
+              'beide Seiten sehen verschiedene Bretter.\n'+
+              'Entweder fasst '+Net.cut.pv+' nicht mehr, oder der Webserver der '+
+              'Steuerung begrenzt den Wert (goform kürzt oft bei 255 Zeichen, '+
+              'unabhängig von der angelegten STRING-Länge).';
+    return;
+  }
   txt.textContent = st==='init' ? 'Verbinde …'
                   : st==='ok'   ? 'Verbunden'
                   : st==='weak' ? 'Gestört'
@@ -3874,8 +3895,9 @@ function newGameSilent(){
 }
 
 /* ---------- Synchronisation (zwei Clients, ein Brett) ----------
-   Der komplette Spielverlauf wird als Zugliste serialisiert (z.B.
-   "e2e4 e7e5 g1f3"). Beide Seiten bauen daraus dasselbe Brett auf.
+   Der komplette Spielverlauf wird als Zugliste serialisiert - kompakt für die
+   Leitung (packGame), ausgeschrieben für Motor und Auswertung
+   (serializeGame). Beide Seiten bauen daraus dasselbe Brett auf.
    Sync.transport wird vom Host gesetzt:
      - im mapp-View-Custom-Widget: Bindung an eine PLC-STRING-Variable
      - im lokalen Demo (?demo in der URL): BroadcastChannel zwischen Tabs */
@@ -3887,24 +3909,63 @@ function serializeGame(){
     return f+t+(pr?pr[1].toLowerCase():'');
   }).join(' ');
 }
+/* Dieselbe Partie kürzer, für die Leitung: zwei Zeichen je Halbzug statt
+   fünf. Jedes Feld ist ein einziges Zeichen (Index 0…63 aus B64); bei einer
+   Umwandlung folgt der Buchstabe des neuen Steins. Mehrdeutig wird dieser
+   dritte Buchstabe nicht - beim Lesen ist die Stellung bekannt, er wird also
+   nur dort erwartet, wo ein Bauer die Grundreihe erreicht.
+
+   Auf der Steuerung entscheidet das über die Partielänge: Der gemeinsame
+   Stand liegt dort in einer STRING-Variable fester Größe, und die läuft mit
+   der ausgeschriebenen Liste ("e2e4 ") schon nach gut 35 Halbzügen über.
+   Das führende ~ macht die Schreibweise erkennbar, damit die Gegenseite
+   beide lesen kann, solange nicht überall dieselbe Fassung liegt. */
+function encRC(r,c){ return B64[c+8*r]; }
+function decRC(ch){ const i=B64.indexOf(ch); return i<0?null:{r:i>>3,c:i&7}; }
+function packGame(){
+  let o='';
+  for(const h of history){
+    o+=encRC(h.mv.from.r,h.mv.from.c)+encRC(h.mv.to.r,h.mv.to.c);
+    const pr=/=([QRBN])/.exec(h.san);
+    if(pr) o+=pr[1].toLowerCase();
+  }
+  return o?'~'+o:'';
+}
+// Einen Zug aus Von/Nach spielen; false, wenn er in dieser Stellung nicht geht
+function playCoded(from,to,promo){
+  const mv=legalMoves(state,state.turn).find(m=>
+    m.from.r===from.r&&m.from.c===from.c&&m.to.r===to.r&&m.to.c===to.c);
+  if(!mv) return false;            // ungültiger Code -> Rest ignorieren
+  finishMove(mv,promo);
+  return true;
+}
 function loadGame(str){
   newGameSilent();
-  const codes=(str||'').trim() ? str.trim().split(/\s+/) : [];
+  const s=String(str||'').trim();
   Sync.suppress=true;
-  for(const code of codes){
-    const from=parseSq(code.slice(0,2)), to=parseSq(code.slice(2,4));
-    const promo=code.length>4?code[4].toUpperCase():null;
-    const mv=legalMoves(state,state.turn).find(m=>
-      m.from.r===from.r&&m.from.c===from.c&&m.to.r===to.r&&m.to.c===to.c);
-    if(!mv) break;                 // ungültiger Code -> Rest ignorieren
-    finishMove(mv,promo);
+  if(s.charAt(0)==='~'){                       // kompakt, zwei Zeichen je Halbzug
+    for(let i=1;i+1<s.length;){
+      const from=decRC(s[i]), to=decRC(s[i+1]);
+      if(!from||!to) break;
+      i+=2;
+      let promo=null;
+      const pc=state.board[from.r][from.c];
+      if(pc&&pc[1]==='P'&&(to.r===0||to.r===7)){ promo=(s[i]||'Q').toUpperCase(); i++; }
+      if(!playCoded(from,to,promo)) break;
+    }
+  } else if(s){                                // ausgeschrieben: "e2e4 e7e5"
+    for(const code of s.split(/\s+/)){
+      const promo=code.length>4?code[4].toUpperCase():null;
+      if(!playCoded(parseSq(code.slice(0,2)),parseSq(code.slice(2,4)),promo)) break;
+    }
   }
   Sync.suppress=false;
   selected=null; legalCache=null;
 }
 /* Gemeinsamer Zustand in EINER SPS-Variable:
-   "w=id:Name;b=id:Name;v=id:Name,id:Name;tc=180+2;tw=180000;tb=180000;st=run|e2e4 e7e5"
-   Kopf = Plätze, Namen, Zuschauer, Zeitmodus und Restzeiten; danach die Zugliste. */
+   "w=id:Name;b=id:Name;v=id:Name,id:Name;tc=180+2;tw=180000;tb=180000;st=run|~sksc"
+   Kopf = Plätze, Namen, Zuschauer, Zeitmodus und Restzeiten; danach die
+   Zugliste (mit ~ die kompakte Schreibweise, ohne die ausgeschriebene). */
 const seats={w:'',b:''};                   // Platz-Kennungen
 const names={w:'',b:''};                   // Spielernamen
 let specs=[];                              // Zuschauer [{id,name}]
@@ -3928,12 +3989,13 @@ function tcParts(){ const p=tc.split('+'); return {base:(+p[0]||180)*1000, inc:(
 function serializeState(){
   const ent=(id,nm)=>id?(id+':'+nm):'';
   const f=['w='+ent(seats.w,names.w), 'b='+ent(seats.b,names.b),
-           'v='+specs.slice(0,MAXSPECS).map(s=>s.id+':'+s.name).join(','),
            'tc='+tc, 'tw='+Math.max(0,Math.round(clock.w)),
            'tb='+Math.max(0,Math.round(clock.b)), 'st='+phase];
+  // Ohne Zuschauer entfällt das Feld - auf der Steuerung zählt jedes Zeichen
+  if(specs.length) f.push('v='+specs.slice(0,MAXSPECS).map(s=>s.id+':'+s.name).join(','));
   if(result) f.push('res='+result.replace(/[;|]/g,''));
   if(undoReq) f.push('ur='+undoReq);
-  return f.join(';')+'|'+serializeGame();
+  return f.join(';')+'|'+packGame();
 }
 function parseState(str){
   const s=String(str||''), i=s.indexOf('|');
@@ -3999,7 +4061,7 @@ function outdated(txt){
   if(phase!=='run'||undoReq) return false;   // Rücknahme darf verkürzen
   const rem=parseState(txt);
   if(rem.st!=='run') return false;           // Ende oder Neustart sind gewollt
-  const g=serializeGame();
+  const g=packGame();
   /* Nur ein echtes Anfangsstück gilt als veraltet. Weichen die Zuglisten
      dagegen voneinander ab, hat die Gegenseite etwas anderes gespielt - dann
      wird ihr Stand übernommen, denn ein gemeinsames Brett zählt mehr. Ein Patt
@@ -4013,8 +4075,9 @@ function outdated(txt){
 function reconcile(){
   if(!Sync.transport||!Sync.ready||Sync.suppress) return;
   if(mySide!=='w'&&mySide!=='b') return;
+  if(Net.cut) return;            // passt ohnehin nicht - nicht endlos anbieten
   const rem=parseState(Sync.last||'');
-  const g=serializeGame();
+  const g=packGame();
   const ahead=g.length>rem.moves.length && g.indexOf(rem.moves)===0;
   if(ahead || rem[mySide]!==myId || (phase==='over'&&rem.st!=='over')) Sync.publish();
 }
@@ -4024,7 +4087,9 @@ function applyState(st){
   seats.w=st.w; seats.b=st.b; names.w=st.nw; names.b=st.nb;
   specs=st.specs; tc=st.tc; phase=st.st; result=st.res; undoReq=st.ur;
   clock.w=st.tw; clock.b=st.tb; clockAt=Date.now();   // Basis fürs lokale Ticken
-  if(st.moves!==serializeGame()) loadGame(st.moves);
+  // Beide Schreibweisen gelten als "schon da", damit ein Client mit älterer
+  // Fassung auf der Gegenseite nicht bei jedem Abgleich einen Neuaufbau auslöst
+  if(st.moves!==packGame() && st.moves!==serializeGame()) loadGame(st.moves);
   /* Platz nur aufgeben, wenn dort tatsächlich jemand anderes sitzt. Ist er
      bloß leer, hat der andere Client mit veralteter Sicht veröffentlicht -
      dann tragen wir uns einfach wieder ein, statt die Partie zu verlassen. */
@@ -4952,6 +5017,7 @@ function setupPLC(){
      Nach einer längeren Störung wäre der alte Schnappschuss ein Rückschritt. */
   let pending=null, sending=false, retry=null, pendingSince=0;
   let stamp=0, sendingSince=0;
+  let wrote='', cutSeen=0;       // zuletzt bestätigt geschrieben, s. poll()
   // Der eigene Stand hat Vorrang - aber nur begrenzt. Klappt das Schreiben
   // laenger nicht, ist ein gemeinsamer Stand wichtiger als der eigene Zug.
   const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
@@ -4964,7 +5030,7 @@ function setupPLC(){
       const r=await post(body('&value='+encodeURIComponent(val)+'&write=1'),6000);
       if(!r.ok) throw new Error('Schreiben '+r.status);
       if(stamp===at) pending=null;            // nichts Neues dazugekommen
-      Sync.last=val; Sync.fails=0; Net.writeOk();
+      Sync.last=val; wrote=val; Sync.fails=0; Net.writeOk();
     }catch(e){ Sync.fails++; Net.writeFail(); }
     finally{
       sending=false;
@@ -5020,12 +5086,24 @@ function setupPLC(){
     try{
       const remote=await read();
       Sync.fails=0;
+      /* Kommt der eigene Stand gekürzt zurück, ist nicht die Leitung schuld,
+         sondern die Variable zu klein: Der Webserver bestätigt das Schreiben,
+         die Steuerung legt aber nur so viele Zeichen ab, wie hineinpassen.
+         Erkennbar ist das daran, dass die Antwort zeichengenau ein Anfangs-
+         stück dessen ist, was wir gerade selbst geschrieben haben - die
+         Gegenseite würde nie denselben Kopf senden, dort stehen ihre eigenen
+         Restzeiten. Ohne diese Prüfung sieht es aus wie ein veralteter
+         Gegenstand, und beide Seiten überschreiben sich endlos gegenseitig.
+         Zweimal hintereinander, damit ein einzelner Zufall nicht reicht. */
+      if(wrote && remote.length<wrote.length && wrote.indexOf(remote)===0){
+        if(++cutSeen>=2) Net.cut={pv:pv, cap:remote.length, need:wrote.length};
+      } else { cutSeen=0; Net.cut=null; }
       /* Zuerst den Zustand übernehmen, danach die Anzeige auffrischen. Andernfalls
          verhindert ein Fehler in der Darstellung dauerhaft, dass Züge des Gegners
          ankommen - die Abfrage liefe weiter, das Spiel bliebe trotzdem stehen. */
       if(!holdsBack() && acceptState(remote)){
         if(Sync.ready && outdated(remote)){
-          Sync.again();                     // drüben steht ein älterer Stand
+          if(!Net.cut) Sync.again();        // drüben steht ein älterer Stand
         } else if(!Sync.ready){
           Sync.last=remote;
           applyState(parseState(remote));   // Namen, Uhren, Modus mit übernehmen
