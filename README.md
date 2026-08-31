@@ -17,7 +17,7 @@ B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 | `stockfish-18-lite-single.js` | Stockfish-Engine (Loader, 21 KB) – **nur für die Zuschauer-Analyse** |
 | `stockfish-18-lite-single.wasm` | Stockfish-Engine (7,3 MB) – dito |
 | `PV_Access.js` | B&R-Original-Bibliothek für PV-Zugriff (Referenz; `chess.html` bringt die Logik selbst mit) |
-| `pvtest.html` | Diagnoseseite, die verschiedene Goform-Request-Formate durchprobiert |
+| `pvtest.html` | Diagnoseseite: probiert Goform-Request-Formate durch und misst, wie lang ein Wert sein darf, bis der Webserver ihn kürzt |
 
 Die Eröffnungsdatenbank (2833 Eröffnungen, Quelle
 [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
@@ -262,11 +262,22 @@ Stand wird gekürzt
 gChessState: nur 255 von 257 Zeichen kommen an
 ```
 
-Die genannte Zahl ist die tatsächlich gemessene Obergrenze. Ist sie kleiner
-als die angelegte Variable, kürzt der Webserver, nicht die Variable — dann
-hilft kein Vergrößern. Gegenprobe: Die Historie liegt in `gChessHist`; wird
-sie über 255 Zeichen hinaus gespeichert, ist der Goform-Weg in Ordnung und
-die Variable `gChessState` ist zu klein angelegt.
+Die genannte Zahl ist die tatsächlich gemessene Obergrenze.
+
+**Ohne zu spielen messen:** `pvtest.html` hat dafür den Abschnitt
+*Wie viel passt durch?*. Er schreibt Werte wachsender Länge und liest sie
+zurück — auf demselben Weg, den das Spiel nimmt — und nennt die Obergrenze
+auf das Zeichen genau. Gibt man eine zweite, anders große Variable an
+(z. B. `gChessHist`), beantwortet er auch die eigentliche Frage:
+
+- **Beide enden bei derselben Länge** → der Webserver begrenzt, nicht die
+  Variable. Vergrößern hilft nicht.
+- **Die zweite fasst mehr** → `gChessState` ist zu klein angelegt und lässt
+  sich in Automation Studio vergrößern.
+
+Geprüft wird dabei auch, ob alle Zeichen unverfälscht ankommen (`~ | ; = :`
+und Umlaute in Spielernamen). Die genannte Variable wird überschrieben —
+also nicht während einer laufenden Partie messen.
 
 Mit 255 Zeichen reicht es für rund 90 Halbzüge (45 Züge) — mit der
 ausgeschriebenen Zugliste waren es 37.

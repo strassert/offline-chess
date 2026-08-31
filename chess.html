@@ -3939,12 +3939,11 @@ function playCoded(from,to,promo){
   finishMove(mv,promo);
   return true;
 }
-function loadGame(str){
+// Eine Zugliste einspielen; Rückgabe: wie viele Halbzüge gelesen wurden
+function replayMoves(s,kompakt){
   newGameSilent();
-  const s=String(str||'').trim();
-  Sync.suppress=true;
-  if(s.charAt(0)==='~'){                       // kompakt, zwei Zeichen je Halbzug
-    for(let i=1;i+1<s.length;){
+  if(kompakt){                                 // zwei Zeichen je Halbzug
+    for(let i=0; i+1<s.length;){
       const from=decRC(s[i]), to=decRC(s[i+1]);
       if(!from||!to) break;
       i+=2;
@@ -3953,12 +3952,24 @@ function loadGame(str){
       if(pc&&pc[1]==='P'&&(to.r===0||to.r===7)){ promo=(s[i]||'Q').toUpperCase(); i++; }
       if(!playCoded(from,to,promo)) break;
     }
-  } else if(s){                                // ausgeschrieben: "e2e4 e7e5"
-    for(const code of s.split(/\s+/)){
+  } else {                                     // ausgeschrieben: "e2e4 e7e5"
+    for(const code of (s?s.split(/\s+/):[])){
       const promo=code.length>4?code[4].toUpperCase():null;
       if(!playCoded(parseSq(code.slice(0,2)),parseSq(code.slice(2,4)),promo)) break;
     }
   }
+  return history.length;
+}
+function loadGame(str){
+  let s=String(str||'').trim();
+  const markiert=(s.charAt(0)==='~');
+  if(markiert) s=s.slice(1);
+  Sync.suppress=true;
+  /* Bleibt die Liste leer, obwohl etwas dasteht, wurde die Schreibweise falsch
+     erkannt - dann eben die andere. Das kostet nichts und rettet die Partie,
+     falls die Marke ~ unterwegs verloren geht: Ohne sie liefe die kompakte
+     Liste in die ausgeschriebene Auswertung und das Brett bliebe leer. */
+  if(!replayMoves(s,markiert) && s) replayMoves(s,!markiert);
   Sync.suppress=false;
   selected=null; legalCache=null;
 }

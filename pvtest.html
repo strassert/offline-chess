@@ -15,6 +15,10 @@
   td.ok{background:#d7f5d7;} td.bad{background:#f7d7d7;}
   code{font-family:Consolas,monospace;word-break:break-all;}
   pre{margin:0;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;}
+  p.hinweis,p.warn{max-width:70ch;line-height:1.45;font-size:14px;}
+  p.warn{background:#fff3cd;border-left:4px solid #e0a800;padding:8px 12px;}
+  pre.bericht{max-height:none;margin-top:14px;background:#fff;border:1px solid #ccc;
+              padding:12px;font-family:Consolas,monospace;font-size:13px;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -27,6 +31,21 @@
   <th>#</th><th>Variante</th><th>Methode</th><th>Anfrage</th>
   <th>Status</th><th>final URL</th><th>Antwort (Anfang)</th>
 </tr></thead><tbody></tbody></table>
+
+<h1>Wie viel passt durch?</h1>
+<p class="hinweis">Das Schachspiel legt den gesamten Spielstand in
+<b>einer</b> Variable ab. Wird dieser Wert unterwegs gekürzt, laufen die
+Bretter auseinander, obwohl jede einzelne Anfrage mit <code>200 OK</code>
+beantwortet wird. Hier wird gemessen, wie lang ein Wert sein darf, bis das
+passiert – und ob alle Zeichen unverfälscht ankommen.</p>
+<p class="warn"><b>Achtung:</b> Die genannte Variable wird dabei
+überschrieben. Nicht während einer laufenden Partie messen, und nicht die
+Historie (<code>gChessHist</code>) angeben, wenn sie erhalten bleiben soll.</p>
+<div class="row">Variable: <input id="cpv" value="gChessState" size="24"></div>
+<div class="row">Vergleichsvariable (freilassen = keine):
+  <input id="cpv2" value="" size="24" placeholder="z. B. gChessHist"></div>
+<button id="cap">Kapazität messen</button>
+<pre id="capout" class="bericht"></pre>
 
 <script>
 "use strict";
@@ -80,6 +99,118 @@ document.getElementById('run').addEventListener('click',async()=>{
     const tr=addRow(++i,label,method,req);
     await attempt(tr,method,url,body);
   }
+});
+
+/* ---------- Kapazitätsmessung ----------
+   Geschrieben und gelesen wird genau so, wie chess.html es tut: POST auf
+   /goform/ReadWrite, ohne eigenen Content-Type. Nur dann misst man den Weg,
+   den das Spiel wirklich nimmt. */
+const G2='/goform/ReadWrite';
+const rumpf=(pv,rest)=>'redirect=/response.asp&variable='+enc(pv)+rest;
+async function pvSchreib(pv,wert){
+  const r=await fetch(G2,{method:'POST',body:rumpf(pv,'&value='+enc(wert)+'&write=1')});
+  return r.ok;
+}
+async function pvLies(pv){
+  const r=await fetch(G2,{method:'POST',body:rumpf(pv,'&value=none&read=1')});
+  if(!r.ok) throw new Error('Lesen antwortet '+r.status);
+  return (await r.text()).replace('<!-- B&R ASP Webserver -->','');
+}
+// Muster, an dem sich jede Stelle wiedererkennen lässt: alle zehn Zeichen
+// steht die Position, dazwischen Punkte. So ist eine Kürzung eindeutig.
+function muster(n){
+  let s='';
+  while(s.length<n){ const m=String(s.length); s+=m+'.'.repeat(Math.max(0,10-m.length)); }
+  return s.slice(0,n);
+}
+async function probe(pv,n){
+  await pvSchreib(pv,muster(n));
+  const zurueck=await pvLies(pv);
+  return {gewollt:n, an:zurueck.length, heil:zurueck===muster(n),
+          praefix:muster(n).indexOf(zurueck)===0};
+}
+// Länge des tatsächlich abgeschickten Rumpfes - für die Frage, ob nicht der
+// Wert, sondern die ganze Anfrage begrenzt ist
+const rumpflaenge=(pv,n)=>rumpf(pv,'&value='+enc(muster(n))+'&write=1').length;
+
+async function messen(pv,sag){
+  sag('Variable ' + pv);
+  try{
+    if(!await pvSchreib(pv,'ABCDE') || (await pvLies(pv))!=='ABCDE'){
+      sag('  Schon fünf Zeichen kommen nicht heil an - hier stimmt etwas');
+      sag('  anderes nicht. Erst die Tabelle oben klären.');
+      return null;
+    }
+    // Zeichentreue: kommt jedes Zeichen zurück, das der Spielstand braucht?
+    const zeichen='ABCabc012+/~|;=:,-_. äöüßÄÖÜ';
+    await pvSchreib(pv,zeichen);
+    const zurueck=await pvLies(pv);
+    if(zurueck===zeichen) sag('  Zeichen: alle unverfälscht (auch ~ | ; = : und Umlaute)');
+    else{
+      sag('  Zeichen: VERÄNDERT');
+      sag('    geschrieben: ' + zeichen);
+      sag('    gelesen:     ' + zurueck);
+      const weg=[...zeichen].filter(c=>zurueck.indexOf(c)<0);
+      if(weg.length) sag('    fehlt: ' + weg.join(' '));
+    }
+    // Obergrenze: erst weit oben ansehen, dann einschachteln
+    const OBEN=2200;
+    let p=await probe(pv,OBEN);
+    if(p.heil){ sag('  Länge: ' + OBEN + ' Zeichen kommen heil an - keine Grenze gefunden');
+                return OBEN; }
+    if(p.praefix && p.an>0)
+      sag('  Länge: bei ' + OBEN + ' Zeichen kommen ' + p.an + ' zurück (abgeschnitten)');
+    else
+      sag('  Länge: bei ' + OBEN + ' Zeichen kommen ' + p.an + ' zurück (nicht übernommen)');
+    let lo=1, hi=OBEN;                       // lo heil, hi nicht heil
+    while(hi-lo>1){
+      const m=(lo+hi)>>1;
+      sag('    prüfe ' + m + ' …');
+      (await probe(pv,m)).heil ? lo=m : hi=m;
+    }
+    sag('  ⇒ Obergrenze: ' + lo + ' Zeichen');
+    sag('    (der Rumpf der Anfrage misst dabei ' + rumpflaenge(pv,lo) + ' Bytes)');
+    return lo;
+  }catch(e){ sag('  FEHLER: ' + e.message); return null; }
+}
+
+document.getElementById('cap').addEventListener('click',async()=>{
+  const feld=document.getElementById('capout');
+  const knopf=document.getElementById('cap');
+  const zeilen=[]; const sag=t=>{ zeilen.push(t); feld.textContent=zeilen.join('\n'); };
+  knopf.disabled=true; feld.textContent='';
+  const pv=document.getElementById('cpv').value.trim();
+  const pv2=document.getElementById('cpv2').value.trim();
+  const a=await messen(pv,sag);
+  let b=null;
+  if(pv2 && pv2!==pv){ sag(''); b=await messen(pv2,sag); }
+
+  sag('');
+  sag('--- Was das heißt ---');
+  if(a===null){ sag('Keine Messung zustande gekommen.'); knopf.disabled=false; return; }
+  // Der Spielstand: Kopf rund 70 Zeichen, dann zwei Zeichen je Halbzug
+  sag('Der Spielstand braucht rund 70 Zeichen für Plätze, Namen und Uhren,');
+  sag('dazu zwei je Halbzug. Bei ' + a + ' Zeichen reicht das für rund ' +
+      Math.floor((a-70)/2) + ' Halbzüge (' + Math.floor((a-70)/4) + ' Züge).');
+  if(b!==null){
+    sag('');
+    if(Math.abs(a-b)<=2)
+      sag('Beide Variablen enden bei derselben Länge - dann begrenzt nicht die');
+    else if(b>a)
+      sag(pv2 + ' fasst mehr (' + b + '). Dann ist ' + pv + ' zu klein angelegt');
+    else
+      sag(pv + ' fasst mehr (' + a + ') als ' + pv2 + ' (' + b + ').');
+    if(Math.abs(a-b)<=2)
+      sag('Variable, sondern der Webserver. Vergrößern hilft dann nicht.');
+    else
+      sag('und lässt sich in Automation Studio vergrößern.');
+  } else {
+    sag('');
+    sag('Für die Unterscheidung, ob die Variable oder der Webserver begrenzt:');
+    sag('dieselbe Messung mit einer zweiten, anders großen Variable wiederholen.');
+    sag('Endet sie bei derselben Länge, ist es der Webserver.');
+  }
+  knopf.disabled=false;
 });
 </script>
 </body>
