@@ -3888,11 +3888,71 @@ function renderUndo(){
     btn.textContent=mine?'Rücknahme angefragt …':'Zug zurück';
   }
 }
+/* ---------- Stellung als FEN ----------
+   Gebraucht für die Momentaufnahme im geteilten Stand: Passt die Zugliste
+   nicht mehr in die SPS-Variable, tritt an die Stelle der ersten Züge die
+   Stellung, die sie ergeben haben. Dieselbe Schreibweise versteht auch die
+   Engine, die Auswertung baut also unverändert darauf auf. */
+function grundStellung(){
+  return {board:initBoard(),turn:'w',
+          castle:{wK:true,wQ:true,bK:true,bQ:true},ep:null,halfmove:0,fullmove:1};
+}
+function toFEN(st){
+  const reihen=[];
+  for(let r=0;r<8;r++){
+    let z='', leer=0;
+    for(let c=0;c<8;c++){
+      const p=st.board[r][c];
+      if(!p){ leer++; continue; }
+      if(leer){ z+=leer; leer=0; }
+      z += (p[0]==='w') ? p[1] : p[1].toLowerCase();
+    }
+    if(leer) z+=leer;
+    reihen.push(z);
+  }
+  const roch=(st.castle.wK?'K':'')+(st.castle.wQ?'Q':'')+
+             (st.castle.bK?'k':'')+(st.castle.bQ?'q':'');
+  const ep=st.ep?(FILES[st.ep[1]]+(8-st.ep[0])):'-';
+  return reihen.join('/')+' '+st.turn+' '+(roch||'-')+' '+ep+' '+
+         (st.halfmove||0)+' '+(st.fullmove||1);
+}
+function fromFEN(fen){
+  const t=String(fen||'').trim().split(/\s+/);
+  if(t.length<4) return null;
+  const reihen=t[0].split('/');
+  if(reihen.length!==8) return null;
+  const board=Array.from({length:8},()=>Array(8).fill(null));
+  for(let r=0;r<8;r++){
+    let c=0;
+    for(const ch of reihen[r]){
+      if(ch>='1'&&ch<='8'){ c+=+ch; continue; }
+      if(c>7||'KQRBNP'.indexOf(ch.toUpperCase())<0) return null;
+      board[r][c++]=(ch===ch.toUpperCase()?'w':'b')+ch.toUpperCase();
+    }
+    if(c!==8) return null;
+  }
+  const e=t[3], ep=(e&&e!=='-'&&FILES.indexOf(e[0])>=0)
+                   ? [8-parseInt(e[1],10), FILES.indexOf(e[0])] : null;
+  return {board:board, turn:(t[1]==='b'?'b':'w'),
+          castle:{wK:t[2].indexOf('K')>=0, wQ:t[2].indexOf('Q')>=0,
+                  bK:t[2].indexOf('k')>=0, bQ:t[2].indexOf('q')>=0},
+          ep:ep, halfmove:+t[4]||0, fullmove:+t[5]||1};
+}
+
+/* Die lokale Zugliste beginnt normalerweise bei der Grundstellung. Wer erst
+   mitten in einer langen Partie dazukommt, bekommt nur die Momentaufnahme -
+   dann fängt sie eben dort an. hAbPly zählt, wie viele Halbzüge davor lagen,
+   damit sich beide Seiten trotzdem über dieselben Zugnummern verständigen. */
+let hBasis=null, hAbPly=0;
+const absPly=()=>hAbPly+history.length;
 function newGameSilent(){
-  state={board:initBoard(),turn:'w',
-    castle:{wK:true,wQ:true,bK:true,bQ:true},ep:null,halfmove:0,fullmove:1};
+  state=(hBasis&&fromFEN(hBasis))||grundStellung();
   history=[]; selected=null; legalCache=null;
 }
+// Von vorn: Grundstellung, keine Momentaufnahme mehr im Spiel
+function neueBasis(){ hBasis=null; hAbPly=0; sBasis=null; sAbPly=0; }
+// Woher die Engine rechnet - ab der Basis, nicht zwingend ab der Grundstellung
+function enginePos(){ return hBasis ? ('fen '+hBasis) : 'startpos'; }
 
 /* ---------- Synchronisation (zwei Clients, ein Brett) ----------
    Der komplette Spielverlauf wird als Zugliste serialisiert - kompakt für die
@@ -3922,14 +3982,30 @@ function serializeGame(){
    beide lesen kann, solange nicht überall dieselbe Fassung liegt. */
 function encRC(r,c){ return B64[c+8*r]; }
 function decRC(ch){ const i=B64.indexOf(ch); return i<0?null:{r:i>>3,c:i&7}; }
-function packGame(){
+function packVon(k){                            // ab diesem Eintrag der Zugliste
   let o='';
-  for(const h of history){
+  for(let i=Math.max(0,k|0);i<history.length;i++){
+    const h=history[i];
     o+=encRC(h.mv.from.r,h.mv.from.c)+encRC(h.mv.to.r,h.mv.to.c);
     const pr=/=([QRBN])/.exec(h.san);
     if(pr) o+=pr[1].toLowerCase();
   }
-  return o?'~'+o:'';
+  return o;
+}
+function packGame(){ const o=packVon(0); return o?'~'+o:''; }
+// Stellung nach den ersten k Zügen der lokalen Liste (k=0: die Basis selbst)
+function stellungBei(k){
+  let st=(hBasis&&fromFEN(hBasis))||grundStellung();
+  for(let i=0;i<k&&i<history.length;i++){
+    const h=history[i];
+    const mv=legalMoves(st,st.turn).find(m=>m.from.r===h.mv.from.r&&m.from.c===h.mv.from.c
+                                           &&m.to.r===h.mv.to.r&&m.to.c===h.mv.to.c);
+    if(!mv) return null;
+    const pr=/=([QRBN])/.exec(h.san);
+    const t={...mv.to}; if(pr) t.promo=pr[1];
+    st=applyMove(st,mv.from,t).ns;
+  }
+  return st;
 }
 // Einen Zug aus Von/Nach spielen; false, wenn er in dieser Stellung nicht geht
 function playCoded(from,to,promo){
@@ -3939,24 +4015,32 @@ function playCoded(from,to,promo){
   finishMove(mv,promo);
   return true;
 }
-// Eine Zugliste einspielen; Rückgabe: wie viele Halbzüge gelesen wurden
+// Kompakte Zugliste auf das JETZIGE Brett anwenden (setzt nichts zurück)
+function spieleTail(s){
+  Sync.suppress=true;
+  for(let i=0; i+1<s.length;){
+    const from=decRC(s[i]), to=decRC(s[i+1]);
+    if(!from||!to) break;
+    i+=2;
+    let promo=null;
+    const pc=state.board[from.r][from.c];
+    if(pc&&pc[1]==='P'&&(to.r===0||to.r===7)){ promo=(s[i]||'Q').toUpperCase(); i++; }
+    if(!playCoded(from,to,promo)) break;
+  }
+  Sync.suppress=false;
+  selected=null; legalCache=null;
+}
+// Eine Zugliste von der Basis aus einspielen; Rückgabe: gelesene Halbzüge
 function replayMoves(s,kompakt){
   newGameSilent();
-  if(kompakt){                                 // zwei Zeichen je Halbzug
-    for(let i=0; i+1<s.length;){
-      const from=decRC(s[i]), to=decRC(s[i+1]);
-      if(!from||!to) break;
-      i+=2;
-      let promo=null;
-      const pc=state.board[from.r][from.c];
-      if(pc&&pc[1]==='P'&&(to.r===0||to.r===7)){ promo=(s[i]||'Q').toUpperCase(); i++; }
-      if(!playCoded(from,to,promo)) break;
-    }
-  } else {                                     // ausgeschrieben: "e2e4 e7e5"
+  if(kompakt) spieleTail(s);
+  else {                                       // ausgeschrieben: "e2e4 e7e5"
+    Sync.suppress=true;
     for(const code of (s?s.split(/\s+/):[])){
       const promo=code.length>4?code[4].toUpperCase():null;
       if(!playCoded(parseSq(code.slice(0,2)),parseSq(code.slice(2,4)),promo)) break;
     }
+    Sync.suppress=false;
   }
   return history.length;
 }
@@ -3997,21 +4081,52 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
   c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function tcParts(){ const p=tc.split('+'); return {base:(+p[0]||180)*1000, inc:(+p[1]||0)*1000}; }
 
+/* Was auf die Leitung geht. sBasis/sAbPly sind die Momentaufnahme, ab der die
+   mitgeschickte Zugliste zählt - lokal bleibt der Verlauf davor erhalten. */
+let sBasis=null, sAbPly=0;
+let WIRE_MAX=240;                 // Platz in der SPS-Variable, s. wireKuerzen()
+const BEHALTEN=40;                // so viele Halbzüge bleiben mindestens im Klartext
 function serializeState(){
   const ent=(id,nm)=>id?(id+':'+nm):'';
   const f=['w='+ent(seats.w,names.w), 'b='+ent(seats.b,names.b),
            'tc='+tc, 'tw='+Math.max(0,Math.round(clock.w)),
-           'tb='+Math.max(0,Math.round(clock.b)), 'st='+phase];
+           'tb='+Math.max(0,Math.round(clock.b)), 'st='+phase,
+           'n='+absPly()];
   // Ohne Zuschauer entfällt das Feld - auf der Steuerung zählt jedes Zeichen
   if(specs.length) f.push('v='+specs.slice(0,MAXSPECS).map(s=>s.id+':'+s.name).join(','));
   if(result) f.push('res='+result.replace(/[;|]/g,''));
   if(undoReq) f.push('ur='+undoReq);
-  return f.join(';')+'|'+packGame();
+  if(sBasis){ f.push('sp='+sAbPly); f.push('sf='+sBasis.replace(/ /g,'_')); }
+  const z=packVon(sAbPly-hAbPly);
+  return f.join(';')+'|'+(z?'~'+z:'');
+}
+/* Der geteilte Stand darf nicht endlos wachsen: Die Variable auf der Steuerung
+   hat eine feste Größe, und der Webserver kürzt stillschweigend, was darüber
+   hinausgeht. Wird es eng, tritt an die Stelle der ersten Züge die Stellung,
+   die sie ergeben haben - ab da wächst nur noch der Rest, und der wird beim
+   nächsten Mal wieder eingekürzt. Damit ist die Partielänge unbegrenzt.
+   Der eigene Verlauf bleibt vollständig; nur die Leitung sieht weniger. */
+function wireKuerzen(){
+  if(serializeState().length<=WIRE_MAX) return;
+  for(let behalten=BEHALTEN; behalten>=6; behalten=behalten>>1){
+    const neu=Math.max(hAbPly, absPly()-behalten);
+    if(neu>sAbPly){
+      const st=stellungBei(neu-hAbPly);
+      if(!st) return;                      // Verlauf nicht nachspielbar - dann eben nicht
+      sBasis=toFEN(st); sAbPly=neu;
+    }
+    if(serializeState().length<=WIRE_MAX || neu<=hAbPly) return;
+  }
 }
 function parseState(str){
   const s=String(str||''), i=s.indexOf('|');
   const out={w:'',b:'',nw:'',nb:'',specs:[],tc:'180+2',tw:0,tb:0,st:'setup',res:'',ur:'',
+             n:-1, sp:0, sf:'', uci:false,
              moves:i<0?s.trim():s.slice(i+1).trim()};
+  /* Die Marke ~ wird hier abgestreift: Verglichen wird überall mit den reinen
+     Zeichen. Ohne Marke ist es die alte, ausgeschriebene Liste ("e2e4 e7e5"). */
+  if(out.moves.charAt(0)==='~') out.moves=out.moves.slice(1);
+  else if(out.moves) out.uci=true;
   if(i<0) return out;                              // ganz altes Format: nur Züge
   const head=s.slice(0,i);
   if(head.indexOf('=')<0){                         // Vorversion: "<id-w>,<id-b>"
@@ -4029,6 +4144,9 @@ function parseState(str){
     else if(k==='st') out.st=v||'setup';
     else if(k==='res') out.res=clean0(v);
     else if(k==='ur') out.ur=v||'';
+    else if(k==='n') out.n=+v;                       // Halbzüge insgesamt
+    else if(k==='sp') out.sp=+v||0;                  // Halbzug der Momentaufnahme
+    else if(k==='sf') out.sf=(v||'').replace(/_/g,' ');
   }
   return out;
 }
@@ -4040,6 +4158,7 @@ const Sync={
            this.oldAt=Date.now(); this.publish(); },
   ready:true,                    // erst nach dem ersten Abgleich darf publiziert werden
   publish(){ if(!this.transport||this.suppress) return;
+             try{ wireKuerzen(); }catch(e){}   // passt der Stand noch in die Variable?
              const s=serializeState();
              // Transporte mit Bestätigung setzen 'last' erst nach dem Schreiben -
              // sonst gilt ein fehlgeschlagener Zug als übertragen und die nächste
@@ -4072,12 +4191,18 @@ function outdated(txt){
   if(phase!=='run'||undoReq) return false;   // Rücknahme darf verkürzen
   const rem=parseState(txt);
   if(rem.st!=='run') return false;           // Ende oder Neustart sind gewollt
-  const g=packGame();
+  if(rem.uci||rem.n<0) return false;         // ältere Fassung: nicht beurteilbar
+  if(rem.n>=absPly()) return false;          // nicht hinter uns
   /* Nur ein echtes Anfangsstück gilt als veraltet. Weichen die Zuglisten
      dagegen voneinander ab, hat die Gegenseite etwas anderes gespielt - dann
      wird ihr Stand übernommen, denn ein gemeinsames Brett zählt mehr. Ein Patt
      zwischen zwei Clients kann daraus nicht entstehen: Von zwei Ständen ist
-     immer höchstens einer das Anfangsstück des anderen. */
+     immer höchstens einer das Anfangsstück des anderen.
+     Verglichen wird ab der Momentaufnahme der Gegenseite - liegt die vor
+     unserem eigenen Verlaufsanfang, können wir nichts dazu sagen. */
+  const k=rem.sp-hAbPly;
+  if(k<0||k>history.length) return false;
+  const g=packVon(k);
   return g.length>rem.moves.length && g.indexOf(rem.moves)===0;
 }
 /* Gegenprobe in Ruhe: Steht drüben wirklich, was hier steht? Ging ein
@@ -4088,9 +4213,39 @@ function reconcile(){
   if(mySide!=='w'&&mySide!=='b') return;
   if(Net.cut) return;            // passt ohnehin nicht - nicht endlos anbieten
   const rem=parseState(Sync.last||'');
-  const g=packGame();
-  const ahead=g.length>rem.moves.length && g.indexOf(rem.moves)===0;
+  const k=rem.sp-hAbPly;
+  const ahead = !rem.uci && rem.n>=0 && rem.n<absPly() &&
+                k>=0 && k<=history.length && packVon(k).indexOf(rem.moves)===0;
   if(ahead || rem[mySide]!==myId || (phase==='over'&&rem.st!=='over')) Sync.publish();
+}
+/* Züge aus einem empfangenen Stand übernehmen. Enthält er eine Momentaufnahme
+   (sp/sf), wird zuerst geprüft, ob diese Stellung im eigenen Verlauf vorkommt:
+   dann bleibt alles davor erhalten und es werden nur die Züge danach angehängt.
+   Sonst - etwa wenn jemand mitten in einer langen Partie dazukommt - beginnt
+   die eigene Zugliste eben bei dieser Stellung. */
+function uebernehmeZuege(st){
+  if(st.uci){                                  // Gegenseite hat noch die alte Fassung
+    if(st.moves!==serializeGame()){ neueBasis(); loadGame(st.moves); }
+    return;
+  }
+  if(!st.sf){                                  // volle Liste ab Grundstellung
+    if(!hBasis && !hAbPly && st.moves===packVon(0)){ sBasis=null; sAbPly=0; return; }
+    neueBasis(); newGameSilent(); spieleTail(st.moves);
+    return;
+  }
+  const fen=st.sf, sp=st.sp;
+  if(sp===sAbPly && fen===sBasis && st.moves===packVon(sp-hAbPly)) return;   // schon so
+  const k=sp-hAbPly;
+  let vor=null;
+  if(k>=0 && k<=history.length){
+    const e=stellungBei(k);
+    if(e && toFEN(e)===fen) vor=e;             // die Momentaufnahme kennen wir
+  }
+  if(vor){ history=history.slice(0,k); state=vor; }
+  else { hBasis=fen; hAbPly=sp; newGameSilent(); }
+  sBasis=fen; sAbPly=sp;
+  selected=null; legalCache=null;
+  spieleTail(st.moves);
 }
 // Übernimmt einen empfangenen Zustand vollständig
 function applyState(st){
@@ -4098,9 +4253,7 @@ function applyState(st){
   seats.w=st.w; seats.b=st.b; names.w=st.nw; names.b=st.nb;
   specs=st.specs; tc=st.tc; phase=st.st; result=st.res; undoReq=st.ur;
   clock.w=st.tw; clock.b=st.tb; clockAt=Date.now();   // Basis fürs lokale Ticken
-  // Beide Schreibweisen gelten als "schon da", damit ein Client mit älterer
-  // Fassung auf der Gegenseite nicht bei jedem Abgleich einen Neuaufbau auslöst
-  if(st.moves!==packGame() && st.moves!==serializeGame()) loadGame(st.moves);
+  uebernehmeZuege(st);
   /* Platz nur aufgeben, wenn dort tatsächlich jemand anderes sitzt. Ist er
      bloß leer, hat der andere Client mit veralteter Sicht veröffentlicht -
      dann tragen wir uns einfach wieder ein, statt die Partie zu verlassen. */
@@ -4141,7 +4294,7 @@ function startGame(){
   const b=tcParts().base;
   clock={w:b,b:b}; clockAt=Date.now(); phase='run'; result='';
   recapData=null; quality=[]; hideRecap();
-  newGameSilent(); render(); renderLobby(); Sync.publish(); syncLobby();
+  neueBasis(); newGameSilent(); render(); renderLobby(); Sync.publish(); syncLobby();
 }
 /* Partieende an einer Stelle bündeln: Nur wer das Ende selbst auslöst,
    schreibt den Eintrag in die Historie – die anderen bekommen ihn über den
@@ -4478,7 +4631,7 @@ function analyse(force){
     return;
   }
   sf.postMessage('stop');
-  sf.postMessage('position startpos'+(moves?' moves '+moves:''));
+  sf.postMessage('position '+enginePos()+(moves?' moves '+moves:''));
   sf.postMessage('go depth 14');
 }
 function updateEval(){                             // nur Zuschauer sehen die Analyse
@@ -4513,6 +4666,9 @@ function encMoves(list){                       // UCI-Liste -> Buch-Kodierung
   return o;
 }
 function bookOpening(moves){                   // längster Treffer als Name
+  // Eröffnungen zählen ab der Grundstellung - wer erst ab einer Momentaufnahme
+  // mitzählt, kennt die ersten Züge nicht und darf hier nichts behaupten
+  if(hBasis) return {name:'',plies:0};
   let best='',code='';
   for(let k=1;k<=moves.length;k++){
     const e=encMoves(moves.slice(0,k));
@@ -4531,7 +4687,7 @@ let batch=null, recapRun=false, recapData=null;
 function evalPosition(movesStr,k,depth){
   return new Promise(res=>{
     const send=()=>{ sf.postMessage('setoption name MultiPV value 2');
-                     sf.postMessage('position startpos'+(movesStr?' moves '+movesStr:''));
+                     sf.postMessage('position '+enginePos()+(movesStr?' moves '+movesStr:''));
                      sf.postMessage('go depth '+(depth||RECAP_DEPTH)); };
     batch={cp:0, best:null, second:null, sign:(k%2===0)?1:-1, res, go:send};
     if(sfReady) send();
@@ -4556,8 +4712,7 @@ function exchangeGain(st,r,c){
 }
 // Stellungen der ganzen Partie nachspielen (für Brett und Opfererkennung)
 function replayStates(codes){
-  const out=[]; let st={board:initBoard(),turn:'w',
-    castle:{wK:true,wQ:true,bK:true,bQ:true},ep:null,halfmove:0,fullmove:1};
+  const out=[]; let st=(hBasis&&fromFEN(hBasis))||grundStellung();
   out.push(st);
   for(const code of codes){
     const from=parseSq(code.slice(0,2)), to=parseSq(code.slice(2,4));
@@ -4976,7 +5131,7 @@ function takeSeat(col){
   // sonst (Partie beendet oder verwaist) beginnt eine frische Aufstellung.
   const takeover = phase==='run' && !!seats[col==='w'?'b':'w'];
   if(!takeover){
-    newGameSilent(); phase='setup'; result='';
+    neueBasis(); newGameSilent(); phase='setup'; result='';
     const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
   }
   Sync.publish();
@@ -5003,7 +5158,7 @@ function leaveSeat(lost){
 }
 function resetSeats(){
   seats.w=''; seats.b=''; names.w=''; names.b=''; specs=[];
-  newGameSilent(); phase='setup'; result='';
+  neueBasis(); newGameSilent(); phase='setup'; result='';
   const b=tcParts().base; clock={w:b,b:b}; clockAt=Date.now();
   lobbyMsg=''; Sync.publish(); render(); renderLobby(); renderPlayers();
 }
@@ -5107,7 +5262,16 @@ function setupPLC(){
          Gegenstand, und beide Seiten überschreiben sich endlos gegenseitig.
          Zweimal hintereinander, damit ein einzelner Zufall nicht reicht. */
       if(wrote && remote.length<wrote.length && wrote.indexOf(remote)===0){
-        if(++cutSeen>=2) Net.cut={pv:pv, cap:remote.length, need:wrote.length};
+        if(++cutSeen>=2){
+          Net.cut={pv:pv, cap:remote.length, need:wrote.length};
+          /* Jetzt ist die wirkliche Obergrenze bekannt - ab hier wird der Stand
+             darunter gehalten, statt weiter dagegen zu laufen. Beim nächsten
+             Senden rückt die Momentaufnahme entsprechend nach. */
+          if(remote.length>=120 && WIRE_MAX>remote.length-8){
+            WIRE_MAX=remote.length-8;
+            Sync.again();
+          }
+        }
       } else { cutSeen=0; Net.cut=null; }
       /* Zuerst den Zustand übernehmen, danach die Anzeige auffrischen. Andernfalls
          verhindert ein Fehler in der Darstellung dauerhaft, dass Züge des Gegners

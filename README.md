@@ -238,13 +238,37 @@ Der Kopf ist rund 60–80 Zeichen lang, je Zuschauer kommen ~20 dazu (maximal
 8 Zuschauer werden übertragen, ohne Zuschauer entfällt das Feld ganz). Die
 Historie liegt seit ihrer Trennung nicht mehr hier drin.
 
-Die Zugliste wächst um **2 Zeichen je Halbzug**: Jedes Feld ist ein einziges
+Die Zugliste kostet **2 Zeichen je Halbzug**: Jedes Feld ist ein einziges
 Zeichen (Feldindex 0…63), bei einer Umwandlung kommt der Buchstabe des neuen
 Steins dazu. Das führende `~` kennzeichnet diese Schreibweise. Ausgeschrieben
 (`e2e4 e7e5`, 5 Zeichen je Halbzug) wird weiterhin gelesen, damit ein Client
 mit älterer Fassung nicht sofort aussteigt — geschrieben wird sie nicht mehr.
 
-**Empfohlen ist `STRING[2000]`.** 120 Halbzüge ergeben damit rund 320 Zeichen.
+#### Der Stand wächst nicht über die Variable hinaus
+
+Auch zwei Zeichen je Halbzug wären irgendwann zu viel. Deshalb **wächst der
+geteilte Stand gar nicht mehr**: Wird er länger als der verfügbare Platz,
+tritt an die Stelle der ersten Züge die Stellung, die sie ergeben haben —
+als FEN in den Feldern `sp` (bei welchem Halbzug) und `sf` (die Stellung).
+Übertragen wird dann nur noch, was danach kam, und beim nächsten Mal rückt
+die Momentaufnahme wieder nach. Die Partielänge ist damit unbegrenzt.
+
+**Lokal geht dabei nichts verloren.** Wer von Anfang an dabei ist, behält den
+vollständigen Verlauf: Zugliste, Rücknahme und die Auswertung über die ganze
+Partie bleiben, wie sie waren. Kürzer sieht es nur die Leitung. Erkennt ein
+Client die Momentaufnahme in seinem eigenen Verlauf wieder, hängt er einfach
+die neuen Züge an, statt neu aufzubauen.
+
+Nur wer **mitten in einer langen Partie dazukommt** (oder die Seite neu lädt),
+bekommt allein die Momentaufnahme. Sein Brett stimmt, aber die Züge davor
+kennt er nicht: Für ihn beginnt die Zugliste dort, die Auswertung rechnet ab
+dieser Stellung, und eine Eröffnung wird nicht mehr benannt.
+
+Gemessen: 300 Halbzüge über eine auf 255 Zeichen begrenzte Steuerung, der
+Stand pendelt dabei zwischen 210 und 240 Zeichen.
+
+**Empfohlen ist trotzdem `STRING[2000]`** — je mehr Platz, desto seltener
+die Momentaufnahme und desto länger bleibt der volle Verlauf auf der Leitung.
 
 #### Wenn der Stand trotzdem gekürzt wird
 
@@ -263,7 +287,10 @@ Stand wird gekürzt
 gChessState: nur 255 von 257 Zeichen kommen an
 ```
 
-Die genannte Zahl ist die tatsächlich gemessene Obergrenze.
+Die genannte Zahl ist die tatsächlich gemessene Obergrenze — und die
+Anwendung zieht daraus die Folgerung selbst: Ab dann hält sie den Stand
+knapp darunter, statt weiter dagegen zu laufen. Die Meldung erscheint also
+höchstens einmal, danach läuft die Partie weiter.
 
 **Ohne zu spielen messen:** `pvtest.html` hat dafür den Abschnitt
 *Wie viel passt durch?*. Er schreibt Werte wachsender Länge und liest sie
