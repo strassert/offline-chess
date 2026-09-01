@@ -51,6 +51,7 @@ Die Betriebsart wird über die URL gewählt:
 | `chess.html?plc&side=w` | Überspringt die Lobby und belegt direkt Weiß (`b` = Schwarz, `v` = Zuschauer). |
 | `chess.html?plc&pv=meineVar` | Abweichender PV-Name (Default: `gChessState`). |
 | `chess.html?demo` | Synchronisation zwischen zwei Tabs desselben Browsers (nur zum Testen). |
+| `chess.html?plc&selbsttest` | **Versteckt.** Zwei Fenster spielen automatisch eine Partie gegeneinander und melden, wenn ein Zug nicht ankommt (siehe [Selbsttest](#selbsttest)). |
 
 ### Lobby
 
@@ -281,6 +282,44 @@ also nicht während einer laufenden Partie messen.
 
 Mit 255 Zeichen reicht es für rund 90 Halbzüge (45 Züge) — mit der
 ausgeschriebenen Zugliste waren es 37.
+
+### Selbsttest
+
+`chess.html?plc&selbsttest` öffnet ein Feld unten rechts mit einem Knopf. Der
+öffnet ein zweites Fenster, beide belegen einen Platz und spielen eine
+vollständige Partie gegeneinander — **über denselben Weg wie im Betrieb**, mit
+`?plc` also wirklich über die Steuerung. Ein Steuerkanal daneben würde genau
+das verdecken, was zu prüfen ist, deshalb gibt es keinen: Jedes Fenster zieht
+für seine eigene Farbe und sieht das andere nur über den geteilten Spielstand.
+
+Gemessen wird das Steckenbleiben. Nach jedem eigenen Halbzug läuft eine Uhr,
+bis der Gegenzug ankommt; bleibt er aus, ist der Test zu Ende und nennt Stelle
+und Umstände. Unterwegs wird einmal eine Rücknahme erbeten und beantwortet.
+
+```
+ERGEBNIS
+  Halbzüge   : 95
+  Stand      : 257 Zeichen
+  Gegenzug   : Median 2.0 s, längste 2.0 s (48 Messungen)
+  Rücknahme  : angenommen, 12 → 10 Halbzüge
+  ACHTUNG    : Stand wird gekürzt, nur 255 von 257 Zeichen kommen an
+  HÄNGT — nach Halbzug 95 kam 8 s lang kein Gegenzug
+```
+
+| Schalter | Bedeutung |
+|----------|-----------|
+| `&halbzuege=160` | wie weit gespielt wird (4–400) |
+| `&geduld=20000` | ab wann ein ausbleibender Zug als Hänger gilt, in ms |
+| `&ruecknahme=12` | bei welchem Halbzug die Rücknahme geprobt wird (`0` = gar nicht) |
+
+**Beide Fenster sichtbar nebeneinander lassen.** Ein verdecktes Fenster wird
+vom Browser gedrosselt — Chromium bremst die Zeitgeber im Hintergrund bis auf
+einen Aufruf je Minute. Der Test erkennt solche Pausen und rechnet sie heraus,
+statt sie der Verbindung anzulasten, aber ungebremst läuft er schneller.
+
+Der Spielstand wird dabei überschrieben, also nicht während einer echten
+Partie starten. Mit `?demo&selbsttest` läuft dasselbe ohne Steuerung, nur
+zwischen zwei Fenstern desselben Browsers.
 
 ### Voraussetzungen für `?plc`
 

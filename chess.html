@@ -5363,6 +5363,241 @@ if(_q.indexOf('plc')>=0){
 } else if(location.protocol!=='file:'){
   detectApi().then(found=>{ if(found) setupServer(); });   // sonst Hotseat
 }
+
+/* ---------- Selbsttest: zwei Tabs spielen eine ganze Partie ----------
+   Versteckt, nur über ?selbsttest erreichbar - im Spiel weist nichts darauf hin.
+
+   Der Test nimmt denselben Weg wie der Betrieb: mit ?plc läuft er über die
+   Steuerung, mit ?demo über den BroadcastChannel. Beide Tabs ziehen jeweils
+   für ihre eigene Farbe; einen Steuerkanal daneben gibt es bewusst nicht -
+   er wäre ein zweiter Weg und würde gerade das verdecken, was zu prüfen ist.
+
+   Gesucht wird das Hängenbleiben: ein Zug, der drüben nicht ankommt. Nach
+   jedem eigenen Halbzug wird gemessen, wie lange der Gegenzug braucht; bleibt
+   er aus, ist der Test zu Ende und sagt, wo und wobei. Von Hand fällt so
+   etwas erst nach vierzig Halbzügen auf.
+
+   Schalter: &halbzuege=160  wie weit gespielt wird
+             &geduld=20000   ab wann ein ausbleibender Zug als Hänger gilt (ms)
+             &ruecknahme=12  bei welchem Halbzug die Rücknahme geprobt wird (0 = nie) */
+function setupSelbsttest(){
+  const q=new URLSearchParams(location.search);
+  const folger=(q.get('rolle')||'')==='b';
+  const farbe=folger?'b':'w';
+  const grenze=(v,klein,gross,vorgabe)=>Math.min(Math.max(+v||vorgabe,klein),gross);
+  const MAX=grenze(q.get('halbzuege'),4,400,160);
+  const GEDULD=grenze(q.get('geduld'),3000,120000,20000);
+  const RUECK=q.get('ruecknahme')===null?12:(+q.get('ruecknahme')||0);
+
+  /* Ein mit window.open geöffneter Tab erbt eine Kopie des sessionStorage und
+     damit dieselbe Kennung wie der Öffner. Beide säßen dann scheinbar auf
+     beiden Plätzen. Im Test bekommt jede Rolle deshalb ihre feste eigene. */
+  myId='pTest'+farbe;
+  try{ sessionStorage.setItem('chessId',myId); }catch(e){}
+
+  const stil=document.createElement('style');
+  stil.textContent='#stKasten{position:fixed;right:12px;bottom:12px;z-index:9999;'+
+    'width:min(440px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:#111;'+
+    'color:#eee;font:12px/1.55 Consolas,Menlo,monospace;border:1px solid #444;'+
+    'border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.45);}'+
+    '#stKasten .sttitel{font-weight:700;margin-bottom:6px;}'+
+    '#stKasten .stzeilen{white-space:pre-wrap;word-break:break-word;}'+
+    '#stKasten .stknopf{margin-top:9px;padding:8px 14px;font:inherit;font-weight:700;'+
+    'cursor:pointer;border:0;border-radius:5px;background:#2b7;color:#042;}'+
+    '#stKasten .stknopf[disabled]{background:#555;color:#bbb;cursor:default;}'+
+    '#stKasten.gut{border-color:#2b7;}#stKasten.schlecht{border-color:#e55;}'+
+    '#stKasten b.gut{color:#6d8;}#stKasten b.schlecht{color:#f88;}';
+  document.head.appendChild(stil);
+  const kasten=document.createElement('div');
+  kasten.id='stKasten';
+  kasten.innerHTML='<div class="sttitel"></div><div class="stzeilen"></div>'+
+                   '<button class="stknopf">Selbsttest starten</button>';
+  document.body.appendChild(kasten);
+  const titelEl=kasten.querySelector('.sttitel');
+  const zeilenEl=kasten.querySelector('.stzeilen');
+  const knopf=kasten.querySelector('.stknopf');
+  const zeilen=[];
+  function sag(t){
+    zeilen.push(t); if(zeilen.length>240) zeilen.shift();
+    zeilenEl.textContent=zeilen.join('\n');
+    kasten.scrollTop=kasten.scrollHeight;
+  }
+  titelEl.textContent='Selbsttest · '+(folger?'Schwarz (folgt)':'Weiß (leitet)');
+
+  let lauf=false, fertig=false, uhr=null, gestartet=false;
+  let sitzSeit=0, zurueckgesetzt=false;
+  let wartenSeit=0, wartenAb=0, wartezeiten=[];
+  let letzteTat=Date.now(), letzterStand='', gemeldet=0;
+  let letzterTick=Date.now(), geschlafen=0, begonnen=0;
+  let rueckSeit=0, rueckStand=-1, rueckErgebnis='nicht geprüft';
+
+  function ziehe(){
+    const lm=legalMoves(state,state.turn);
+    if(!lm.length) return false;
+    const mv=lm[Math.floor(Math.random()*lm.length)];
+    const p=state.board[mv.from.r][mv.from.c];
+    // Umwandlung ohne den Auswahldialog - der bräuchte einen Klick
+    if(p&&p[1]==='P'&&(mv.to.r===0||mv.to.r===7)) finishMove(mv,'Q'); else doMove(mv);
+    return true;
+  }
+  function schluss(gut,grund){
+    if(fertig) return;
+    fertig=true; clearInterval(uhr);
+    const s=wartezeiten.slice().sort((a,b)=>a-b);
+    const sek=ms=>(ms/1000).toFixed(1)+' s';
+    sag('');
+    sag('ERGEBNIS');
+    sag('  Halbzüge   : '+history.length);
+    try{ sag('  Stand      : '+serializeState().length+' Zeichen'); }catch(e){}
+    if(s.length) sag('  Gegenzug   : Median '+sek(s[s.length>>1])+', längste '+
+                     sek(s[s.length-1])+' ('+s.length+' Messungen)');
+    if(RUECK) sag('  Rücknahme  : '+rueckErgebnis);
+    if(geschlafen>3000) sag('  Gedrosselt : '+Math.round(geschlafen/1000)+' s im '+
+                            'Hintergrund, nicht gewertet');
+    if(Net.cut) sag('  ACHTUNG    : Stand wird gekürzt, nur '+Net.cut.cap+' von '+
+                    Net.cut.need+' Zeichen kommen an');
+    sag('  '+(gut?'BESTANDEN':'HÄNGT')+' — '+grund);
+    kasten.className=gut?'gut':'schlecht';
+    titelEl.innerHTML='Selbsttest · <b class="'+(gut?'gut':'schlecht')+'">'+
+                      (gut?'bestanden':'hängen geblieben')+'</b>';
+    knopf.textContent='fertig'; knopf.disabled=true;
+  }
+
+  function tick(){
+    if(fertig||!lauf) return;
+    /* Ein Fenster im Hintergrund bekommt vom Browser kaum noch Rechenzeit:
+       Chromium drosselt dort die Zeitgeber, nach einigen Minuten bis auf einen
+       Aufruf je Minute. Diese Pause darf nicht als Hänger zählen - sonst misst
+       der Test den Browser statt die Verbindung. Also wird sie erkannt und aus
+       allen Fristen herausgerechnet. */
+    const nun=Date.now(), pause=nun-letzterTick;
+    letzterTick=nun;
+    if(pause>3000){
+      geschlafen+=pause;
+      letzteTat+=pause;
+      if(wartenSeit) wartenSeit+=pause;
+      if(rueckSeit) rueckSeit+=pause;
+      sag('Fenster lag '+Math.round(pause/1000)+' s still (Browser drosselt im '+
+          'Hintergrund) — Zeit wird nicht gewertet');
+    }
+    /* Ohne ?plc/?srv sucht die Seite den Server erst noch - deshalb ein paar
+       Sekunden Nachsicht, bevor der Test das Fehlen als Ergebnis meldet. */
+    if(!Sync.transport){
+      if(nun-begonnen>6000)
+        schluss(false,'kein Weg zum Gegenüber — ?plc, ?srv oder ?demo dazunehmen');
+      return;
+    }
+    if(!Sync.ready) return;                       // erster Abgleich steht aus
+
+    /* Wachhund über allem: Ein Test, der selbst still stehen bleibt, ist
+       wertlos - er soll ja gerade das Steckenbleiben finden. Rührt sich am
+       Brett gar nichts mehr, ist Schluss, ganz gleich wer am Zug wäre. */
+    const jetzt=phase+'/'+packGame()+'/'+undoReq;
+    if(jetzt!==letzterStand){ letzterStand=jetzt; letzteTat=Date.now(); }
+    else if(Date.now()-letzteTat>GEDULD*1.5){
+      schluss(false,'seit '+Math.round((Date.now()-letzteTat)/1000)+' s rührt sich '+
+              'nichts mehr (Halbzug '+history.length+', '+
+              (state.turn===farbe?'ich wäre am Zug':'die Gegenseite wäre am Zug')+')');
+      return;
+    }
+
+    // 1. Platz sichern. Bleibt er von einem früheren Lauf belegt, einmal räumen.
+    if(seats[farbe]!==myId){
+      if(!sitzSeit) sitzSeit=Date.now();
+      if(!folger && !zurueckgesetzt && seats[farbe] && Date.now()-sitzSeit>8000){
+        zurueckgesetzt=true; sag('Platz war belegt — Plätze zurückgesetzt');
+        resetSeats(); return;
+      }
+      const el=document.getElementById('nameInput');
+      if(el) el.value=folger?'TestS':'TestW';
+      takeSeat(farbe);
+      return;
+    }
+    sitzSeit=0;
+
+    // 2. Der leitende Tab startet, sobald beide sitzen
+    if(phase!=='run'){
+      if(phase==='over'&&gestartet){ schluss(true,'Partie regulär beendet: '+(result||'—')); return; }
+      if(!folger && !gestartet && seats.w && seats.b){
+        gestartet=true; sag('beide Plätze belegt — Partie gestartet'); startGame();
+      }
+      return;
+    }
+    gestartet=true;
+
+    // 3. Eine Bitte der Gegenseite beantworten, auf die eigene warten
+    if(undoReq && undoReq!==farbe){ sag('Rücknahme erbeten — angenommen'); undoAccept(); return; }
+    if(undoReq===farbe){
+      if(Date.now()-rueckSeit>GEDULD){
+        rueckErgebnis='unbeantwortet';
+        schluss(false,'Rücknahme blieb '+Math.round(GEDULD/1000)+' s unbeantwortet');
+      }
+      return;
+    }
+    if(rueckSeit && rueckStand>=0){                     // Bitte ist beantwortet
+      rueckErgebnis = history.length<rueckStand
+        ? 'angenommen, '+rueckStand+' → '+history.length+' Halbzüge'
+        : 'abgelehnt, weiterhin '+history.length+' Halbzüge';
+      sag('Rücknahme: '+rueckErgebnis);
+      rueckSeit=0; rueckStand=-1; wartenSeit=0;
+    }
+
+    // 4. Hier zeigt sich das Hängen: Der Gegenzug bleibt aus.
+    if(wartenSeit){
+      if(history.length!==wartenAb){ wartezeiten.push(Date.now()-wartenSeit); wartenSeit=0; }
+      else if(Date.now()-wartenSeit>GEDULD){
+        schluss(false,'nach Halbzug '+history.length+' kam '+
+                Math.round((Date.now()-wartenSeit)/1000)+' s lang kein Gegenzug');
+        return;
+      }
+    }
+
+    // 5. Ziehen, wenn ich an der Reihe bin
+    if(state.turn===farbe && !wartenSeit){
+      if(history.length>=MAX){ schluss(true,MAX+' Halbzüge ohne Hänger gespielt'); return; }
+      if(!folger && RUECK && history.length>=RUECK && rueckErgebnis==='nicht geprüft'){
+        rueckSeit=Date.now(); rueckStand=history.length;
+        sag('Halbzug '+history.length+' — Rücknahme wird erbeten');
+        undo(); return;
+      }
+      if(!ziehe()){ schluss(true,'keine Züge mehr — Partie zu Ende'); return; }
+      wartenSeit=Date.now(); wartenAb=history.length;
+      // Nicht an geraden Zahlen festmachen: Wer Weiß zieht, landet immer auf
+      // ungeraden - der leitende Tab hätte sonst nie etwas gemeldet.
+      if(history.length-gemeldet>=10){
+        gemeldet=history.length;
+        sag('Halbzug '+history.length+' · Stand '+serializeState().length+' Zeichen'+
+            (Net.avg?(' · '+Net.avg+' ms'):''));
+      }
+    }
+  }
+
+  if(folger){
+    knopf.remove();
+    lauf=true; begonnen=Date.now(); sag('wartet auf den leitenden Tab …');
+    uhr=setInterval(tick,400);
+  } else {
+    sag('Zwei Tabs spielen eine vollständige Partie gegeneinander und melden,');
+    sag('wenn ein Zug drüben nicht ankommt. Bis zu '+MAX+' Halbzüge, ein Zug');
+    sag('darf höchstens '+Math.round(GEDULD/1000)+' s ausbleiben.');
+    sag('');
+    sag('Der Spielstand wird dabei überschrieben — nicht während einer Partie.');
+    knopf.addEventListener('click',()=>{
+      knopf.disabled=true; knopf.textContent='läuft …';
+      zeilen.length=0; lauf=true; begonnen=Date.now();
+      sag('Weg: '+(Net.mode||'ohne Steuerung/Server'));
+      const u=new URL(location.href);
+      u.searchParams.set('rolle','b');
+      /* Als eigenes Fenster, nicht als Tab: Ein verdeckter Tab wird gedrosselt,
+         zwei nebeneinander sichtbare Fenster laufen beide voll. */
+      const w=window.open(u.toString(),'chess-selbsttest-b','width=900,height=760');
+      if(w) sag('zweites Fenster geöffnet — beide sichtbar nebeneinander lassen');
+      else  sag('zweites Fenster blockiert — Popup erlauben oder von Hand öffnen:\n'+u.toString());
+      uhr=setInterval(tick,400);
+    });
+  }
+}
+if(location.search.indexOf('selbsttest')>=0) setupSelbsttest();
 </script>
 </body>
 </html>
