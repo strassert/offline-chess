@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 rem ---------------------------------------------------------------
-rem  Laedt das Schachspiel per SFTP auf den Webspace.
+rem  Laedt Startseite und Spiele per SFTP auf den Webspace.
 rem
 rem  Das Passwort wird bei jedem Lauf abgefragt und nirgends gespeichert.
 rem  In deploy.config.bat stehen nur Serveradresse, Benutzer und Zielordner.
@@ -106,7 +106,7 @@ if "!PULLRC!"=="0" (
 echo.
 echo === Dateien pruefen ===
 set "MISSING="
-for %%F in (chess.html dashboard.html manifest.webmanifest sw.js icon-192.png icon-512.png apple-touch-icon.png php\.htaccess php\api\state.php php\api\hist.php php\api\speed.php php\api\muell.php php\api\health.php php\api\reset.php php\api\.htaccess) do (
+for %%F in (chess.html vier.html dashboard.html manifest.webmanifest sw.js icon-192.png icon-512.png apple-touch-icon.png php\.htaccess php\api\state.php php\api\hist.php php\api\speed.php php\api\muell.php php\api\health.php php\api\reset.php php\api\.htaccess) do (
   if not exist "%ROOT%\%%F" set "MISSING=!MISSING! %%F"
 )
 if not "!MISSING!"=="" (
@@ -121,13 +121,13 @@ echo.
 echo === Weitere Anwendungen ===
 set /a EXTRAN=0
 for %%F in ("%ROOT%\*.html") do (
-  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="dashboard.html" (
-  if /i not "%%~nxF"=="pvtest.html" (
+  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="vier.html" (
+  if /i not "%%~nxF"=="dashboard.html" if /i not "%%~nxF"=="pvtest.html" (
     set /a EXTRAN+=1
     echo   %%~nxF
   ))
 )
-if !EXTRAN!==0 echo   keine ^(nur Startseite und Schach^)
+if !EXTRAN!==0 echo   keine ^(nur Startseite, Schach und Vier gewinnt^)
 
 if exist "%ROOT%\stockfish-18-lite-single.wasm" (
   set "WITHENGINE=1"
@@ -165,9 +165,10 @@ set "LIST=%TEMP%\chess-sftp-%RANDOM%.txt"
 >> "%LIST%" echo lcd "%ROOT%"
 >> "%LIST%" echo put dashboard.html index.html
 >> "%LIST%" echo put chess.html chess.html
+>> "%LIST%" echo put vier.html vier.html
 for %%F in ("%ROOT%\*.html") do (
-  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="dashboard.html" (
-  if /i not "%%~nxF"=="pvtest.html" (
+  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="vier.html" (
+  if /i not "%%~nxF"=="dashboard.html" if /i not "%%~nxF"=="pvtest.html" (
     >> "%LIST%" echo put "%%~nxF"
   ))
 )
@@ -236,9 +237,10 @@ set "WS=%TEMP%\chess-winscp-%RANDOM%.txt"
 >> "%WS%" echo lcd "%ROOT%"
 >> "%WS%" echo put dashboard.html index.html
 >> "%WS%" echo put chess.html chess.html
+>> "%WS%" echo put vier.html vier.html
 for %%F in ("%ROOT%\*.html") do (
-  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="dashboard.html" (
-  if /i not "%%~nxF"=="pvtest.html" (
+  if /i not "%%~nxF"=="chess.html" if /i not "%%~nxF"=="vier.html" (
+  if /i not "%%~nxF"=="dashboard.html" if /i not "%%~nxF"=="pvtest.html" (
     >> "%WS%" echo put "%%~nxF"
   ))
 )
@@ -283,9 +285,10 @@ if not "%RC%"=="0" (
 
 echo === Fertig ===
 echo.
-echo   Startseite: https://%SFTP_HOST%/
-echo   Schach:     https://%SFTP_HOST%/chess.html
-echo   Pruefen:   https://%SFTP_HOST%/api/health.php
-echo              muss {"ok":true,...,"writable":true} liefern.
+echo   Startseite:   https://%SFTP_HOST%/
+echo   Schach:       https://%SFTP_HOST%/chess.html
+echo   Vier gewinnt: https://%SFTP_HOST%/vier.html
+echo   Pruefen:      https://%SFTP_HOST%/api/health.php
+echo                 muss {"ok":true,...,"writable":true} liefern.
 echo.
 pause

@@ -11,7 +11,8 @@ Getestet gegen Apache 2 mit PHP/FPM (z. B. cablelink `[CL MSP] Linux`).
 | Datei | Ziel | Größe |
 |-------|------|-------|
 | `dashboard.html` | Wurzel als `index.html` | 35 KB |
-| `chess.html` | Wurzel | ~175 KB |
+| `chess.html` | Wurzel | ~220 KB |
+| `vier.html` | Wurzel | ~90 KB |
 | `zug.html` und jede weitere `.html` im Projektordner | Wurzel | je nach Datei |
 | `manifest.webmanifest`, `sw.js` | Wurzel – für „Zum Startbildschirm" | 2 KB |
 | `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Wurzel | 23 KB |
@@ -27,7 +28,8 @@ Ergebnis auf dem Webspace:
 ```
 /                        (Wurzel des Uploads)
 ├── index.html           (die umbenannte dashboard.html – Startseite)
-├── chess.html           (das Spiel)
+├── chess.html           (Schach)
+├── vier.html            (Vier gewinnt)
 ├── zug.html             (und jede weitere Anwendung aus dem Projektordner)
 ├── manifest.webmanifest
 ├── sw.js
@@ -54,7 +56,7 @@ Parameter `?spiel=`; ohne ihn bleibt es beim Schach.
 
 1. **Dateien per FTP/SFTP hochladen**, Struktur wie oben. `dashboard.html`
    in `index.html` umbenennen, damit die Adresse ohne Dateinamen die
-   Startseite zeigt; `chess.html` behält seinen Namen.
+   Startseite zeigt; `chess.html` und `vier.html` behalten ihre Namen.
    Die `.wasm`-Datei **binär** übertragen (die meisten Programme machen das
    automatisch; bei FileZilla notfalls unter *Übertragung → Übertragungstyp
    → Binär* erzwingen).
@@ -62,8 +64,10 @@ Parameter `?spiel=`; ohne ihn bleibt es beim Schach.
    anlegen. Im FTP-Programm Rechte auf `755` stellen; klappt das nicht,
    `775` oder `777` versuchen.
 3. **Aufrufen**: `https://gg2.members.cablelink.at/` zeigt die Startseite
-   mit Wetter und Anwendungsauswahl, `…/chess.html` das Spiel. Das Spiel
-   erkennt die PHP-Endpunkte selbst – kein URL-Zusatz nötig.
+   mit Wetter und Anwendungsauswahl, `…/chess.html` das Schachspiel,
+   `…/vier.html` Vier gewinnt. Beide erkennen die PHP-Endpunkte selbst –
+   kein URL-Zusatz nötig, und jedes hat seine eigene Ablage
+   (`api/state.txt` bzw. `api/state-vier.txt`).
 
 Prüfen lässt sich der Server-Teil direkt:
 `https://…/api/health.php` muss `{"ok":true,"backend":"php","writable":true}`
@@ -86,7 +90,7 @@ Einmalig vorbereiten:
 Repository.
 
 Danach genügt ein Doppelklick auf `deploy-sftp.bat`. Am Ende nennt es die
-Adresse und die Prüf-URL.
+Adressen beider Spiele und die Prüf-URL.
 
 **Vor der Übertragung fragt es, ob der Stand von GitHub geholt werden soll:**
 
@@ -231,7 +235,9 @@ Skriptteils eintragen.
 ```js
 const APPS=[
   { name:'Schach', datei:'chess.html', icon:'chess',
-    text:'Zwei Spieler an zwei Rechnern, Zuschauer, Uhr und Auswertung.' }
+    text:'Zwei Spieler an zwei Rechnern, Zuschauer, Uhr und Auswertung.' },
+  { name:'Vier gewinnt', datei:'vier.html', icon:'vier',
+    text:'Vier in eine Reihe - zwei Rechner, Zuschauer, Uhr und Auswertung.' }
 ];
 ```
 
@@ -239,9 +245,9 @@ Ein eigenes Sinnbild kommt als SVG in `APPICON` dazu; ohne Eintrag bleibt
 die Kachel einfach ohne Bild.
 
 **Die Datei selbst** muss nur im Projektordner liegen: Das Übertragungsskript
-nimmt **jede weitere `.html`** von dort mit – `chess.html`, `dashboard.html`
-und die Diagnoseseite `pvtest.html` sind bereits eigens behandelt, alles
-andere wird unverändert hochgeladen. Vor der Übertragung listet es auf, was
+nimmt **jede weitere `.html`** von dort mit – `chess.html`, `vier.html`,
+`dashboard.html` und die Diagnoseseite `pvtest.html` sind bereits eigens
+behandelt, alles andere wird unverändert hochgeladen. Vor der Übertragung listet es auf, was
 es gefunden hat:
 
 ```
