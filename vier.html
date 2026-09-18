@@ -61,8 +61,11 @@
                           0 0 calc(var(--zelle)/4) rgba(255,255,255,.75);
                animation:pochen 1.6s ease-in-out infinite; }
   @keyframes pochen{ 50%{ transform:scale(1.06); } }
-  /* Vorschau: wohin der eigene Stein fiele */
-  .stein.vor{ opacity:.42; }
+  /* Vorschau: wohin der eigene Stein fiele. Als Ring, nicht als blasse
+     Füllung - halbdurchsichtiges Rot über dem blauen Brett wird violett. */
+  .stein.vor.r{ box-shadow:inset 0 0 0 calc(var(--zelle)/12) rgba(229,72,77,.9); }
+  .stein.vor.g{ box-shadow:inset 0 0 0 calc(var(--zelle)/12) rgba(245,195,68,.9); }
+  .stein.vor{ background:var(--loch); }
   .cell.spalte{ background:rgba(255,255,255,.07); }
   .cell.letzter::after{ content:''; position:absolute; width:22%; aspect-ratio:1;
     border-radius:50%; background:rgba(255,255,255,.55); pointer-events:none; }
@@ -101,6 +104,17 @@
   .players .clk{font-family:Consolas,monospace; font-size:15px; font-weight:700;}
   .players .clk.low{color:var(--rot);}
   .specs{margin-top:10px; font-size:12px; opacity:.6; line-height:1.5;}
+  /* ---------- Gegner und Stufe (nur ohne Gegenstelle) ---------- */
+  .gegner{margin:10px 0 2px;}
+  .glabel{font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    opacity:.45; margin-bottom:5px;}
+  .grow{display:flex; gap:5px; margin-bottom:6px;}
+  .gbtn{flex:1; padding:7px 2px; border-radius:7px; border:1px solid #4a505c;
+    background:#1c1f26; color:var(--text); font-size:12px; font-weight:600;
+    cursor:pointer; white-space:nowrap;}
+  .gbtn.on{background:var(--accent); color:#0e1a09; border-color:var(--accent);}
+  .gbtn:disabled{opacity:.45; cursor:not-allowed;}
+  @media (hover:none){ .gbtn{padding:10px 2px;} }
   .evalbox{margin-top:10px; background:#1c1f26; border-radius:8px; padding:8px 10px;}
   .evalbar{height:10px; border-radius:5px; background:var(--gelb); overflow:hidden;
     box-shadow:inset 0 0 0 1px #4a505c;}
@@ -253,6 +267,24 @@
     <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
     <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Rot am Zug</span></div>
     <div class="players" id="players"></div>
+    <div class="gegner" id="gegnerBox" style="display:none">
+      <div class="glabel">Gegner</div>
+      <div class="grow" id="gegnerRow">
+        <button class="gbtn on" data-wer="mensch">Mensch</button>
+        <button class="gbtn" data-wer="computer">Computer</button>
+      </div>
+      <div class="grow" id="stufeRow" style="display:none">
+        <button class="gbtn" data-ki="leicht">Leicht</button>
+        <button class="gbtn" data-ki="mittel">Mittel</button>
+        <button class="gbtn" data-ki="schwer">Schwer</button>
+        <button class="gbtn" data-ki="meister">Meister</button>
+      </div>
+      <div class="grow" id="seiteRow" style="display:none">
+        <button class="gbtn on" data-seite="g">Du beginnst</button>
+        <button class="gbtn" data-seite="r">Computer beginnt</button>
+      </div>
+      <button class="btn link" id="zurLobby" style="display:none">Gegen andere spielen</button>
+    </div>
     <div class="review" id="review" style="display:none">
       <div class="rvbar"><div class="fill" id="rvFill"></div></div>
       <div class="rvhead"><span id="rvScore">50 %</span><span id="rvCount">0 / 0</span></div>
@@ -334,6 +366,7 @@
 
     <button class="btn" id="lobbyStart" style="display:none">Spiel starten</button>
     <button class="btn sec" id="seatV">Nur zuschauen</button>
+    <button class="btn sec" id="soloBtn">Gegen den Computer</button>
     <button class="btn sec" id="lobbyLeave" style="display:none">Platz freigeben</button>
     <div class="msg" id="lobbyMsg"></div>
     <div class="histtabs">
@@ -428,7 +461,9 @@ function newGame(){
   hideRecap(); renderReview();
   phase='setup'; result=''; resCode='';
   const b=tcParts().base; clock={r:b,g:b}; clockAt=Date.now();
+  kiAbbrechen();
   render(); Sync.publish(); renderPlayers(); syncLobby();
+  kiPlanen();                            // faengt der Computer an, legt er vor
 }
 
 /* ---------- Anzeige ---------- */
@@ -446,6 +481,7 @@ function darfZiehen(){
   if(Sync.transport && phase!=='run') return false;
   if(mySide==='v') return false;
   if(mySide && mySide!==state.turn) return false;
+  if(kiAktiv() && (kiDenkt || state.turn===kiFarbe)) return false;
   return true;
 }
 
@@ -489,9 +525,14 @@ function render(){
   } else if(Sync.transport && phase==='setup'){
     statusEl.textContent=(seats.r&&seats.g)?'Bereit – Spiel starten':'Warte auf Mitspieler …';
   } else if(sg){
-    statusEl.textContent=(namen(sg))+' gewinnt!';
+    statusEl.textContent=kiAktiv() ? ((sg===kiFarbe)?'Der Computer gewinnt!':'Du gewinnst!')
+                                   : ((namen(sg))+' gewinnt!');
   } else if(vollesBrett()){
     statusEl.textContent='Unentschieden – das Brett ist voll.';
+  } else if(kiDenkt){
+    statusEl.textContent='Computer denkt …';
+  } else if(kiAktiv()){
+    statusEl.textContent=(state.turn===kiFarbe)?'Computer ist am Zug':'Du bist am Zug';
   } else if(mySide==='v'){
     statusEl.textContent=amZug+' am Zug';
   } else if(mySide){
@@ -567,14 +608,14 @@ function zieh(c){
   undoReq='';                                 // ein Zug beendet jede Anfrage
   chargeClock(zug.p);
   if(zug.sieg){
-    finishGame(namen(zug.p)+' gewinnt – vier in einer Reihe', zug.p);
+    finishGame(siegText(zug.p), zug.p);
     if(!Sync.transport) localOver=true;
   } else if(vollesBrett()){
     finishGame('Unentschieden – das Brett ist voll','d');
     if(!Sync.transport) localOver=true;
   }
   render(); Sync.publish();
-  if(partieVorbei()) runRecap();
+  if(partieVorbei()) runRecap(); else kiPlanen();
 }
 
 /* Die letzten n Züge zurücknehmen */
@@ -597,10 +638,15 @@ function undo(){
     undoReq=mySide; Sync.publish(); render(); renderUndo();
     return;
   }
-  undoZuege(1);
+  /* Gegen den Computer geht es zwei Steine zurück - den eigenen und die
+     Antwort darauf. Einen einzelnen zurückzunehmen hieße nur, dem Computer
+     den Zug noch einmal machen zu lassen. */
+  kiAbbrechen();
+  undoZuege(kiAktiv() ? (state.turn===kiFarbe ? 1 : Math.min(2,history.length)) : 1);
   // Im Hotseat macht die Rücknahme ein beendetes Spiel wieder zu einem laufenden
   if(!partieVorbei()){ localOver=false; result=''; resCode=''; if(phase==='over') phase='setup'; }
   render(); Sync.publish();
+  kiPlanen();
 }
 function undoAccept(){
   if(!undoReq||undoReq===mySide) return;
@@ -963,7 +1009,9 @@ function endGame(text,sieger){
 }
 function pushHistory(sieger){
   if(!history.length) return;
-  hist.unshift({r:namen('r'), g:namen('g'), e:sieger||'d', n:history.length,
+  // Gegen den Computer steht in der Liste, gegen welche Stufe gespielt wurde
+  const wer=(p)=>kiAktiv() ? (p===kiFarbe ? ('KI '+KI[kiStufe].name) : 'Du') : namen(p);
+  hist.unshift({r:wer('r'), g:wer('g'), e:sieger||'d', n:history.length,
                 t:Math.floor(Date.now()/60000).toString(36)});
   hist=hist.slice(0,HIST_MAX);
   if(Sync.transport) storeHist(); else saveLocalHist();
@@ -1057,7 +1105,7 @@ function renderPlayers(){
     const nm=document.createElement('span'); nm.className='nm';
     nm.textContent = netz ? (names[col]||(seats[col]?'Spieler':'frei'))+
                             (seats[col]===myId?' (du)':'')
-                          : FARBEN[col];
+                          : (kiAktiv() ? spielerName(col) : FARBEN[col]);
     head.appendChild(dot); head.appendChild(nm);
     if(netz){
       const ck=document.createElement('span'); ck.className='clk';
@@ -1071,6 +1119,7 @@ function renderPlayers(){
   const rb=document.getElementById('recapBtn');
   const vorbei=netz?(phase==='over'):localOver;
   if(rb) rb.style.display=(vorbei&&history.length)?'block':'none';
+  renderGegner();
   const sp=document.getElementById('specs');
   if(!netz){ sp.textContent=''; return; }
   const weitere=specPlus?((specs.length?' und ':'')+specPlus+' weitere'):'';
@@ -1211,7 +1260,7 @@ function negamax(depth,alpha,beta){
 function bewerte(zuege,maxKnoten,maxTiefe){
   sSetzen(zuege);
   sBudget=maxKnoten||80000; sKnoten=0;
-  let erg={wert:0, best:-1, spitze:0, tiefe:0};
+  let erg={wert:0, best:-1, spitze:0, tiefe:0, werte:[]};
   for(let t=2;t<=(maxTiefe||16);t+=2){
     sAus=false;
     const werte=[];
@@ -1239,7 +1288,7 @@ function bewerte(zuege,maxKnoten,maxTiefe){
     if(sAus||!werte.length) break;
     werte.sort((a,b)=>b.v-a.v);
     // Bleibt nur eine Spalte, gab es nichts zu wählen - das ist keine Leistung
-    erg={wert:werte[0].v, best:werte[0].c, tiefe:t,
+    erg={wert:werte[0].v, best:werte[0].c, tiefe:t, werte:werte,
          spitze:werte.length>1?(chance(werte[0].v)-chance(werte[1].v)):0};
     if(Math.abs(erg.wert)>SIEG-100) break;           // entschieden
   }
@@ -1275,6 +1324,162 @@ function bewerteStellung(zuege,knoten,tiefe){
   const e=bewerte(zuege,knoten,tiefe);
   const vz=(st.turn==='r')?1:-1;
   return {rot:e.wert*vz, best:e.best, spitze:e.spitze, tiefe:e.tiefe, fertig:false};
+}
+
+/* ---------- Gegner Computer ----------
+   Nur im Alleinbetrieb - wo eine Gegenstelle hängt, sitzt drüben ein Mensch.
+
+   Die Stufen unterscheiden sich in zwei Dingen: wie weit gerechnet wird und
+   wie oft der Computer absichtlich daneben greift. Nur am Budget zu drehen
+   reicht nicht: Vier gewinnt ist so klein, dass selbst eine flache Suche jeden
+   Gewinn und jede Drohung sieht - das wäre für Anfänger schon zu viel.
+   Einen Vierer, der offen daliegt, nimmt aber jede Stufe mit; alles andere
+   sähe nicht leicht aus, sondern kaputt. */
+/* Die Stufen greifen an vier Stellschrauben an. Nur am Rechenbudget zu drehen
+   reicht nicht: Vier gewinnt ist so klein, dass schon eine flache Suche
+   Doppeldrohungen aufbaut - und daran scheitert ein Anfänger jedes Mal. Die
+   beiden unteren Stufen rechnen deshalb gar nicht; sie unterscheiden sich nur
+   darin, wie zuverlässig sie eine Drohung halten.
+
+     suche  Knotenbudget der Suche; 0 heißt: gar nicht rechnen
+     block  wie zuverlässig eine gegnerische Drohung gehalten wird
+     zufall wie oft stattdessen einfach gewürfelt wird
+     zweit  wie oft der zweitbeste statt des besten Zuges kommt
+
+   Gemessen gegen einen Gegner, der Gewinne nimmt, Drohungen blockt und sonst
+   zur Mitte spielt (60 Partien je Stufe, abwechselnd beginnend), gewinnt
+   dieser gegen Leicht 68 %, gegen Mittel 45 %, gegen Schwer 20 % - und gegen
+   Meister keine einzige.                                                   */
+const KI={
+  leicht: {name:'Leicht',  suche:0,      block:0.55, zufall:1,    zweit:0},
+  mittel: {name:'Mittel',  suche:0,      block:1,    zufall:1,    zweit:0},
+  schwer: {name:'Schwer',  suche:2500,   block:1,    zufall:0.45, zweit:0.35},
+  meister:{name:'Meister', suche:200000, block:1,    zufall:0,    zweit:0}
+};
+const KI_VORGABE='mittel';         // was "Computer" ohne weitere Wahl bedeutet
+const KI_PAUSE=420;                // damit der eigene Stein erst sichtbar fällt
+let kiStufe='';                    // '' = Mensch gegen Mensch
+let kiFarbe='g';                   // Farbe des Computers (Vorgabe: Gelb)
+let kiTimer=null, kiDenkt=false;
+/* Wird noch geprueft, ob eine Gegenstelle antwortet, darf der Computer nicht
+   schon ziehen - sein Zug landete sonst in einer fremden Partie. */
+let erkennungLaeuft=false;
+const kiAktiv=()=>!Sync.transport && !erkennungLaeuft && !!KI[kiStufe];
+
+/* Spalte, mit der p sofort vier in einer Reihe hätte - sonst -1 */
+function sofortSieg(st,p){
+  for(let c=0;c<COLS;c++){
+    if(!moeglich(st,c)) continue;
+    const r=st.hoehe[c];
+    st.feld[c*ROWS+r]=codeVon(p);
+    const w=viererBei(st,c,r);
+    st.feld[c*ROWS+r]=0;
+    if(w) return c;
+  }
+  return -1;
+}
+/* Gewürfelt wird nicht gleichverteilt - zur Mitte hin öfter. Das sieht nach
+   Spiel aus und nicht nach Zufallsgenerator. */
+const MITTIG=[1,2,3,4,3,2,1];
+function zufallsSpalte(){
+  const topf=[];
+  for(let c=0;c<COLS;c++) if(moeglich(state,c))
+    for(let k=0;k<MITTIG[c];k++) topf.push(c);
+  return topf.length ? topf[Math.floor(Math.random()*topf.length)] : -1;
+}
+function kiWahl(){
+  const s=KI[kiStufe]; if(!s) return -1;
+  // 1. Ein offener Vierer wird immer genommen - jede andere Stufe wäre kaputt
+  const jetzt=sofortSieg(state,kiFarbe);
+  if(jetzt>=0) return jetzt;
+  // 2. Eine unmittelbare Drohung halten, so zuverlässig wie die Stufe es hergibt
+  const droht=sofortSieg(state,gegner(kiFarbe));
+  if(droht>=0 && Math.random()<s.block) return droht;
+  // 3. Würfeln statt denken
+  if(s.zufall && Math.random()<s.zufall) return zufallsSpalte();
+  if(!s.suche) return zufallsSpalte();
+  // 4. Rechnen
+  const e=bewerte(history.map(h=>h.c), s.suche);
+  const liste=e.werte||[];
+  if(!liste.length) return (e.best>=0)?e.best:zufallsSpalte();
+  /* Zweitbester Zug statt bestem - aber nur, wenn er die Partie nicht
+     verschenkt. Sonst wäre "Mittel" in Wahrheit "manchmal katastrophal". */
+  if(s.zweit && liste.length>1 && Math.random()<s.zweit &&
+     chance(liste[0].v)-chance(liste[1].v)<25) return liste[1].c;
+  return liste[0].c;
+}
+function kiAbbrechen(){ clearTimeout(kiTimer); kiTimer=null; kiDenkt=false; }
+/* Der Computer zieht nach einer kurzen Pause. Sie ist nicht Zierde: Die Suche
+   blockiert, solange sie läuft - erst muss die Anzeige den eigenen Zug und das
+   "denkt …" gezeigt haben. */
+function kiPlanen(){
+  kiAbbrechen();
+  if(!kiAktiv()||partieVorbei()||state.turn!==kiFarbe) return;
+  kiDenkt=true;
+  kiTimer=setTimeout(()=>{
+    kiTimer=null;
+    if(!kiAktiv()||partieVorbei()||state.turn!==kiFarbe){ kiDenkt=false; render(); return; }
+    let c=-1;
+    try{ c=kiWahl(); }catch(e){ c=-1; }
+    if(c<0||!moeglich(state,c)) c=zufallsSpalte();      // Notnagel
+    kiDenkt=false;
+    if(c>=0) zieh(c); else render();
+  },KI_PAUSE);
+  render();
+}
+/* Wer steht wo im Panel - gegen den Computer heißen die Seiten anders */
+function spielerName(p){
+  if(!kiAktiv()) return namen(p);
+  return (p===kiFarbe) ? ('Computer · '+KI[kiStufe].name) : 'Du';
+}
+function siegText(p){
+  if(!kiAktiv()) return namen(p)+' gewinnt – vier in einer Reihe';
+  return (p===kiFarbe) ? 'Der Computer gewinnt – vier in einer Reihe'
+                       : 'Du gewinnst – vier in einer Reihe';
+}
+function renderGegner(){
+  const box=document.getElementById('gegnerBox');
+  if(!box) return;
+  // Mit Gegenstelle ist die Frage nach dem Gegner beantwortet
+  box.style.display=Sync.transport?'none':'block';
+  for(const b of document.querySelectorAll('#gegnerRow .gbtn'))
+    b.classList.toggle('on',(b.dataset.wer==='computer')===!!kiStufe);
+  const stufe=document.getElementById('stufeRow');
+  if(stufe){
+    stufe.style.display=kiStufe?'flex':'none';
+    for(const b of stufe.querySelectorAll('.gbtn'))
+      b.classList.toggle('on',b.dataset.ki===kiStufe);
+  }
+  const seite=document.getElementById('seiteRow');
+  if(seite){
+    seite.style.display=kiStufe?'flex':'none';
+    for(const b of seite.querySelectorAll('.gbtn'))
+      b.classList.toggle('on',b.dataset.seite===kiFarbe);
+  }
+  // Die Kopfzeile sagt, wogegen gespielt wird
+  const sub=document.querySelector('.sub');
+  if(sub && !Sync.transport)
+    sub.textContent = kiStufe ? ('Gegen den Computer · '+KI[kiStufe].name)
+                              : 'Hotseat · 2 Spieler · offline';
+  /* Wer ueber ?solo hergekommen ist, findet sonst nicht mehr zurueck: Die
+     Lobby erscheint in diesem Betrieb gar nicht. */
+  const zur=document.getElementById('zurLobby');
+  if(zur) zur.style.display=(location.search.indexOf('solo')>=0)?'block':'none';
+}
+let letzteStufe='';                // fuer den Weg zurueck von "Mensch"
+function setzeKI(stufe){
+  if(stufe===kiStufe) return;
+  kiStufe=KI[stufe]?stufe:'';
+  if(kiStufe) letzteStufe=kiStufe;
+  try{ localStorage.setItem('vierKi',kiStufe); }catch(e){}
+  kiAbbrechen(); renderGegner(); newGame();
+}
+function setzeKiSeite(farbe){
+  if(farbe!=='r'&&farbe!=='g') return;
+  if(farbe===kiFarbe) return;
+  kiFarbe=farbe;
+  try{ localStorage.setItem('vierKiSeite',kiFarbe); }catch(e){}
+  kiAbbrechen(); renderGegner(); newGame();
 }
 
 /* ---------- Bewertung für Zuschauer ----------
@@ -2044,14 +2249,42 @@ document.getElementById('undoBtn').addEventListener('click',undo);
 document.getElementById('undoYes').addEventListener('click',undoAccept);
 document.getElementById('undoNo').addEventListener('click',undoDecline);
 
+const _q=location.search;
+erkennungLaeuft = location.protocol!=='file:' && !/solo|plc|srv|demo/.test(_q);
+
+/* Gegner und Stufe merkt sich der Browser - wer gegen "Mittel" spielt, will
+   das beim naechsten Mal in aller Regel wieder. */
+try{
+  const g=localStorage.getItem('vierKi'); if(KI[g]) kiStufe=g;
+  const f=localStorage.getItem('vierKiSeite'); if(f==='r'||f==='g') kiFarbe=f;
+}catch(e){}
+for(const b of document.querySelectorAll('#gegnerRow .gbtn'))
+  b.addEventListener('click',()=>setzeKI(
+    b.dataset.wer==='computer' ? (kiStufe||letzteStufe||KI_VORGABE) : ''));
+for(const b of document.querySelectorAll('#stufeRow .gbtn'))
+  b.addEventListener('click',()=>setzeKI(b.dataset.ki));
+for(const b of document.querySelectorAll('#seiteRow .gbtn'))
+  b.addEventListener('click',()=>setzeKiSeite(b.dataset.seite));
+// Aus der Lobby heraus allein gegen den Computer: neu laden, ohne Gegenstelle
+document.getElementById('soloBtn').addEventListener('click',()=>{
+  location.search='?solo';
+});
+document.getElementById('zurLobby').addEventListener('click',()=>{
+  location.search='';                          // zurueck zur Erkennung/Lobby
+});
+
 loadLocalHist();             // Hotseat: Historie aus dem Browser
 newGame();                   // frisches Brett – Transport hängt noch nicht -> kein Publish
 
 /* Betriebsart wählen: ?plc erzwingt die Steuerung, ?srv den Server, ?demo
    zwei Tabs. Ohne Angabe wird geprüft, ob ein Server antwortet - wird die
    Seite vom Container ausgeliefert, läuft sie damit ohne Zusatz-URL. */
-const _q=location.search;
-if(_q.indexOf('plc')>=0){
+/* ?solo haelt die Seite bewusst bei sich: keine Gegenstelle, dafuer der
+   Computer als Gegner. Ohne das wuerde auf dem Webspace die Erkennung
+   anspringen und aus dem Alleinspiel eine Lobby machen. */
+if(_q.indexOf('solo')>=0){
+  /* nichts einrichten - Alleinbetrieb */
+} else if(_q.indexOf('plc')>=0){
   setupPLC();
 } else if(_q.indexOf('srv')>=0){
   setupServer();
@@ -2061,7 +2294,12 @@ if(_q.indexOf('plc')>=0){
   bc.onmessage=(e)=>Sync.receive(e.data);
   applySide(); showLobby();
 } else if(location.protocol!=='file:'){
-  detectApi().then(gefunden=>{ if(gefunden) setupServer(); });   // sonst Hotseat
+  const fertig=(gefunden)=>{
+    erkennungLaeuft=false;
+    if(gefunden) setupServer();
+    else { renderGegner(); kiPlanen(); }      // niemand da: dann eben allein
+  };
+  detectApi().then(fertig).catch(()=>fertig(false));
 }
 </script>
 </body>

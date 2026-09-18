@@ -388,11 +388,66 @@ dieselbe Verbindungsanzeige, dieselbe Historie mit Rangliste.
 | `vier.html` | Hotseat: zwei Personen an einem Bildschirm. |
 | `vier.html?plc&side=r` | Überspringt die Lobby und belegt Rot (`g` = Gelb, `v` = Zuschauer). |
 | `vier.html?plc&pv=meineVar` | Abweichender PV-Name (Vorgabe `gVierState`). |
+| `vier.html?solo` | **Allein gegen den Computer** – keine Gegenstelle, auch wenn eine da wäre. |
 | `vier.html?srv` | Node-Server bzw. PHP-Webhosting (wird sonst selbst erkannt). |
 | `vier.html?demo` | Zwei Tabs desselben Browsers (nur zum Testen). |
 
 Gespielt wird mit der Maus – ein Klick irgendwo in die Spalte – oder mit den
 Tasten **1 bis 7**. Rot beginnt.
+
+### Gegen den Computer
+
+Wo keine Gegenstelle hängt, steht im Seitenpanel eine Zeile **Gegner**:
+*Mensch* oder *Computer*, darunter die Stufe und wer beginnt. Beides merkt
+sich der Browser. Auf dem Webspace oder am Server, wo sonst die Lobby
+erscheint, führt dort der Knopf *Gegen den Computer* hin – er lädt die Seite
+als `?solo` neu, damit die Erkennung nicht dazwischenfunkt. Zurück geht es
+über *Gegen andere spielen*.
+
+**Nur am Rechenbudget zu drehen reicht nicht.** Vier gewinnt ist so klein,
+dass schon eine flache Suche Doppeldrohungen aufbaut – und daran scheitert ein
+Anfänger jedes Mal. Die beiden unteren Stufen rechnen deshalb gar nicht; sie
+unterscheiden sich allein darin, wie zuverlässig sie eine Drohung halten.
+
+| Stufe | Wie sie spielt |
+|-------|----------------|
+| **Leicht** | rechnet nicht und übersieht knapp jede zweite Drohung |
+| **Mittel** | rechnet nicht, hält aber jede Drohung |
+| **Schwer** | rechnet ein paar Züge voraus, würfelt noch bei jedem zweiten Zug |
+| **Meister** | rechnet, so weit es in eine halbe Sekunde passt |
+
+**Einen offenen Vierer nimmt jede Stufe mit** – die eine Ausnahme von der
+Würfelei. Alles andere sähe nicht leicht aus, sondern kaputt. Und der
+zweitbeste Zug wird nur genommen, wenn er die Partie nicht verschenkt; sonst
+wäre *Schwer* in Wahrheit *manchmal katastrophal*.
+
+Wie stark das ist, lässt sich messen: Ein Gegenspieler, der offene Vierer
+nimmt, Drohungen blockt und sonst zur Mitte spielt – also ein aufmerksamer
+Anfänger – gewinnt in 60 Partien je Stufe, abwechselnd beginnend:
+
+```
+gegen Leicht    68 %  (41:18)     Die Stufen untereinander, je 6 Partien:
+gegen Mittel    45 %  (27:31)       Meister gegen Schwer   6 : 0
+gegen Schwer    20 %  (12:46)       Meister gegen Leicht   6 : 0
+gegen Meister    0 %  ( 0:60)       Schwer  gegen Mittel   4 : 2
+                                    Mittel  gegen Leicht   6 : 0
+```
+
+Einen offenen Vierer nahm dabei jede Stufe in allen 40 Proben; eine
+unmittelbare Drohung hielt Leicht in 29 von 40 Fällen, die anderen drei in
+allen 40.
+
+Der Computer zieht nach einer knappen halben Sekunde – die Pause ist nicht
+Zierde: Die Suche blockiert, solange sie läuft, also muss die Anzeige vorher
+den eigenen Stein und das *denkt …* gezeigt haben.
+
+*Zug zurück* nimmt gegen den Computer **zwei** Steine zurück, den eigenen und
+die Antwort darauf. Einen einzelnen zurückzunehmen hieße nur, den Computer
+denselben Zug noch einmal machen zu lassen.
+
+In der Historie steht die Stufe mit: `Du – KI Mittel`. Die Auswertung nach der
+Partie gibt es wie sonst auch – gegen den Computer ist sie besonders nützlich,
+weil sie zeigt, wo genau die Partie gekippt ist.
 
 ### Eigene Ablage
 
