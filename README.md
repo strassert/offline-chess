@@ -1,13 +1,14 @@
 # Offline-Schach für B&R-Steuerung
 
-Schachspiel als einzelne HTML-Datei, gehostet vom AR-Webserver einer
-B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
+Schach und Vier gewinnt, je eine einzelne HTML-Datei, gehostet vom
+AR-Webserver einer B&R-SPS. Läuft komplett offline, ohne externe Bibliotheken.
 
 ## Dateien
 
 | Datei | Zweck |
 |-------|-------|
 | `chess.html` | Das Spiel – vollständige Schachregeln, Zugliste, Undo, Brett drehen |
+| `vier.html` | Vier gewinnt – dieselbe Lobby, Uhr und Auswertung wie beim Schach, aber mit eingebautem Löser statt Engine-Datei (siehe [Vier gewinnt](#vier-gewinnt)) |
 | `zug.html` | Zugsimulator (Shinkansen, S-Bahn Salzburg) – klassisch oder Kindermodus (3+); Einzeldatei, aus [strassert/Test](https://github.com/strassert/Test) gebaut via `build-zug.js` |
 | `build-zug.js` | baut `zug.html` neu aus den Quellen des Zugsimulators (`node build-zug.js`) |
 | `dashboard.html` | Startseite fürs Webhosting: Anwendungen, dazu Wetter und Abfuhrtermine (siehe [README-WEBHOSTING](README-WEBHOSTING.md#startseite)) |
@@ -351,6 +352,7 @@ zwischen zwei Fenstern desselben Browsers.
 ### Voraussetzungen für `?plc`
 
 1. Globale SPS-Variable, z. B. `gChessState : STRING[1000]`
+   (für Vier gewinnt zusätzlich `gVierState`, siehe [Vier gewinnt](#vier-gewinnt))
 2. `response.asp` liegt im Web-Root neben `chess.html`
 3. In der CPU-Konfiguration unter *ASP Goform configuration*:
    - `Activate ASP Goform` = **on**
@@ -372,6 +374,88 @@ POST /goform/ReadWrite
   redirect=/response.asp&variable=<PV>&value=<wert>&write=1   (schreiben)
   redirect=/response.asp&variable=<PV>&value=none&read=1      (lesen)
 ```
+
+## Vier gewinnt
+
+`vier.html` ist das zweite Spiel auf der Startseite. Es folgt dem Schach in
+allem, was nicht das Spiel selbst ist: dieselbe Lobby mit Namen, Platzwahl und
+Zuschauern, dieselbe Bedenkzeit, dieselbe Rücknahme als Bitte an den Gegner,
+dieselbe Verbindungsanzeige, dieselbe Historie mit Rangliste.
+
+| URL | Verhalten |
+|-----|-----------|
+| `vier.html?plc` | **Der Link für alle.** Lobby: Rot, Gelb oder zuschauen. |
+| `vier.html` | Hotseat: zwei Personen an einem Bildschirm. |
+| `vier.html?plc&side=r` | Überspringt die Lobby und belegt Rot (`g` = Gelb, `v` = Zuschauer). |
+| `vier.html?plc&pv=meineVar` | Abweichender PV-Name (Vorgabe `gVierState`). |
+| `vier.html?srv` | Node-Server bzw. PHP-Webhosting (wird sonst selbst erkannt). |
+| `vier.html?demo` | Zwei Tabs desselben Browsers (nur zum Testen). |
+
+Gespielt wird mit der Maus – ein Klick irgendwo in die Spalte – oder mit den
+Tasten **1 bis 7**. Rot beginnt.
+
+### Eigene Ablage
+
+Schach und Vier gewinnt teilen sich **nichts**; sonst überschriebe ein Spiel
+den Stand des anderen.
+
+| Betriebsart | Ablage |
+|-------------|--------|
+| Steuerung | `gVierState : STRING[1000]`, Historie `gVierHist : STRING[2000]` (am besten remanent) |
+| Node-Server | `state-vier.txt` und `hist-vier.txt` neben den Schachdateien |
+| PHP-Webhosting | `api/state-vier.txt` und `api/hist-vier.txt` |
+| Hotseat | Browser-Speicher (localStorage) |
+
+Server und PHP unterscheiden die Spiele am Parameter `?spiel=vier`. Ohne ihn
+bleibt alles beim Schach-Stand – ältere Clients merken von der Trennung nichts.
+
+### Platzbedarf
+
+Ein Zug ist **ein Zeichen**: die Spaltennummer. Länger als 42 Zeichen kann
+eine Partie nicht werden, mehr Felder hat das Brett nicht. Der ganze Stand
+misst damit rund 110 bis 150 Zeichen und passt auch dort, wo goform bei 255
+abschneidet. Eine Momentaufnahme wie beim Schach braucht es hier nicht.
+
+Wird es trotzdem eng – sehr kleine Variable –, weicht zuerst die
+Zuschauerliste; von ihr bleibt wenigstens die Zahl (*„Zuschauer: 3 weitere"*).
+Danach geht der Ergebnistext als einzelnes Zeichen mit und wird aus dem Brett
+wieder aufgebaut. **Die Zugliste ist das Letzte, was geopfert wird** – sie ist
+die Partie. Gemessen: 42 Züge und vier Zuschauer über eine auf 150 Zeichen
+begrenzte Variable, ohne einen einzigen verlorenen Zug.
+
+### Wer ist neuer?
+
+Beim Schach entscheidet die Länge der Zugliste darüber, welcher Stand der
+jüngere ist. Das trägt hier nicht: Eine angenommene Rücknahme **verkürzt** die
+Liste, und ein verzögerter Schreibvorgang der Gegenseite würde sie damit wieder
+aufheben. Deshalb zählt jede selbst ausgelöste Änderung einen Schrittzähler
+(`gn=`) hoch; wer empfängt, übernimmt den höheren Stand. Damit ist die
+Reihenfolge auch dann eindeutig, wenn Lesen und Schreiben sich überholen.
+
+### Bewertung und Auswertung
+
+Gerechnet wird im Programm selbst – Alpha-Beta über das Brett, mit drei
+Abkürzungen: Mitte zuerst, ein sofortiger Gewinn beendet die Suche, und
+Zwangszüge (der Gegner droht an genau einer Stelle) kosten keine Tiefe. Es gibt
+**keine zusätzliche Datei und keinen MIME-Eintrag** – die 7,3 MB der
+Schach-Engine braucht Vier gewinnt nicht.
+
+Zuschauer sehen während der Partie einen Balken mit der Gewinnaussicht für Rot,
+die beste Spalte und deren Markierung auf dem Brett. Spieler sehen das nicht.
+Steht ein Gewinn fest, steht dort statt eines Prozentwerts *„Rot gewinnt in
+5 Zügen"*.
+
+Nach dem Ende wertet jeder Client die Partie aus: Verlauf der Gewinnaussicht
+als Diagramm, Genauigkeit beider Spieler, Einstufung jedes Zuges
+(Glanzzug `!!`, Bester Zug, Gut, Ungenau `?!`, Verpasster Sieg, Fehler `?`,
+Grober Fehler `??`), Teilgenauigkeit für Eröffnung, Mittelspiel und Endspiel
+sowie die drei größten Einbrüche. Über *Partie durchgehen* lässt sich jeder Zug
+nachspielen, mit dem Hinweis *„besser: Spalte 5"*.
+
+Bewertet wird – wie beim Schach – der Verlust an **Gewinnwahrscheinlichkeit**.
+Angezeigt wird sie auch als solche: Bei Vier gewinnt ist ein Prozentwert die
+ehrlichere Auskunft als eine Zahl wie `+0,56`. Erzwungene Gewinne sind absolut,
+alles dazwischen ist Schätzung.
 
 ## Einbindung in mapp View
 

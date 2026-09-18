@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/* Schach-Server für einen Proxmox-LXC-Container.
-   Hält den geteilten Spielstand im Speicher, schiebt Änderungen per
+/* Spiele-Server für einen Proxmox-LXC-Container.
+   Hält die geteilten Spielstände im Speicher, schiebt Änderungen per
    Server-Sent Events an alle Clients und liefert die statischen Dateien aus.
    Bewusst ohne Fremdpakete – nur Node-Bordmittel. */
 'use strict';
@@ -26,40 +26,64 @@ const MIME = {
   '.ico': 'image/x-icon'
 };
 
-let state = '';
-let version = 0;
-let hist = '';                            // vergangene Partien, eigene Ablage
-const clients = new Set();                // offene SSE-Verbindungen
+/* ---------- Räume ----------
+   Jedes Spiel hat seinen eigenen Stand: ?spiel=vier liegt in state-vier.txt,
+   ohne Angabe bleibt es bei state.txt. Dadurch stören sich Schach und Vier
+   gewinnt nicht gegenseitig, und ältere Clients (die den Parameter nicht
+   kennen) landen weiter im selben Raum wie bisher. */
+const raeume = new Map();
+const NAME_OK = /^[a-z0-9]{1,8}$/;
 
-/* ---------- Zustand ---------- */
-try {
-  state = fs.readFileSync(STATE_FILE, 'utf8');
-  console.log('Spielstand geladen (' + state.length + ' Zeichen)');
-} catch (e) { /* erster Start: leer beginnen */ }
-try {
-  hist = fs.readFileSync(HIST_FILE, 'utf8');
-  console.log('Historie geladen (' + hist.length + ' Zeichen)');
-} catch (e) { /* noch keine Partien */ }
+function dateiFuer(basis, raum) {
+  if (!raum) return basis;
+  const e = path.extname(basis);
+  return path.join(path.dirname(basis), path.basename(basis, e) + '-' + raum + e);
+}
 
-let saveTimer = null;
-function persist() {                      // gebündelt schreiben, nicht bei jedem Zug
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.writeFile(STATE_FILE, state, err => {
+function raumVon(url) {
+  const q = url.indexOf('?');
+  if (q < 0) return holeRaum('');
+  const name = new URLSearchParams(url.slice(q + 1)).get('spiel') || '';
+  return holeRaum(NAME_OK.test(name) ? name : '');
+}
+
+function holeRaum(name) {
+  let r = raeume.get(name);
+  if (r) return r;
+  r = { name, state: '', version: 0, hist: '', clients: new Set(), saveTimer: null,
+        stateFile: dateiFuer(STATE_FILE, name), histFile: dateiFuer(HIST_FILE, name) };
+  try {
+    r.state = fs.readFileSync(r.stateFile, 'utf8');
+    console.log('Spielstand geladen: ' + path.basename(r.stateFile) +
+                ' (' + r.state.length + ' Zeichen)');
+  } catch (e) { /* erster Start: leer beginnen */ }
+  try {
+    r.hist = fs.readFileSync(r.histFile, 'utf8');
+    console.log('Historie geladen: ' + path.basename(r.histFile) +
+                ' (' + r.hist.length + ' Zeichen)');
+  } catch (e) { /* noch keine Partien */ }
+  raeume.set(name, r);
+  return r;
+}
+
+function persist(r) {                     // gebündelt schreiben, nicht bei jedem Zug
+  clearTimeout(r.saveTimer);
+  r.saveTimer = setTimeout(() => {
+    fs.writeFile(r.stateFile, r.state, err => {
       if (err) console.error('Speichern fehlgeschlagen:', err.message);
     });
   }, 500);
 }
 
-function setState(next) {
-  if (next === state) return;
-  state = next;
-  version++;
-  const msg = 'data: ' + JSON.stringify({ v: version, s: state }) + '\n\n';
-  for (const res of clients) {
-    try { res.write(msg); } catch (e) { clients.delete(res); }
+function setState(r, next) {
+  if (next === r.state) return;
+  r.state = next;
+  r.version++;
+  const msg = 'data: ' + JSON.stringify({ v: r.version, s: r.state }) + '\n\n';
+  for (const res of r.clients) {
+    try { res.write(msg); } catch (e) { r.clients.delete(res); }
   }
-  persist();
+  persist(r);
 }
 
 /* ---------- Hilfsfunktionen ---------- */
@@ -101,14 +125,16 @@ function serveFile(req, res, urlPath) {
 /* ---------- Server ---------- */
 const server = http.createServer((req, res) => {
   const url = req.url || '/';
+  const pfad = url.split('?')[0];
 
-  if (url === '/api/state') {
-    if (req.method === 'GET') return sendJson(res, 200, { v: version, s: state });
+  if (pfad === '/api/state') {
+    const r = raumVon(url);
+    if (req.method === 'GET') return sendJson(res, 200, { v: r.version, s: r.state });
     if (req.method === 'POST') {
       return readBody(req, body => {
         if (body === null) return sendJson(res, 413, { error: 'zu groß' });
-        setState(body);
-        sendJson(res, 200, { v: version });
+        setState(r, body);
+        sendJson(res, 200, { v: r.version });
       });
     }
     res.writeHead(405); return res.end();
@@ -116,13 +142,14 @@ const server = http.createServer((req, res) => {
 
   // Die Historie aendert sich nur am Partieende - daher eigener Endpunkt
   // und keine Uebertragung im Sekundentakt.
-  if (url === '/api/hist') {
-    if (req.method === 'GET') return sendJson(res, 200, { s: hist });
+  if (pfad === '/api/hist') {
+    const r = raumVon(url);
+    if (req.method === 'GET') return sendJson(res, 200, { s: r.hist });
     if (req.method === 'POST') {
       return readBody(req, body => {
         if (body === null) return sendJson(res, 413, { error: 'zu groß' });
-        hist = body;
-        fs.writeFile(HIST_FILE, hist, err => {
+        r.hist = body;
+        fs.writeFile(r.histFile, r.hist, err => {
           if (err) console.error('Historie speichern fehlgeschlagen:', err.message);
         });
         sendJson(res, 200, { ok: true });
@@ -131,7 +158,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(405); return res.end();
   }
 
-  if (url === '/api/events') {
+  if (pfad === '/api/events') {
+    const r = raumVon(url);
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-store',
@@ -139,21 +167,25 @@ const server = http.createServer((req, res) => {
       'X-Accel-Buffering': 'no'
     });
     res.write('retry: 2000\n\n');
-    res.write('data: ' + JSON.stringify({ v: version, s: state }) + '\n\n');
-    clients.add(res);
+    res.write('data: ' + JSON.stringify({ v: r.version, s: r.state }) + '\n\n');
+    r.clients.add(res);
     // Kommentarzeilen halten die Verbindung durch Proxys hindurch offen
     const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 25000);
-    req.on('close', () => { clearInterval(ping); clients.delete(res); });
+    req.on('close', () => { clearInterval(ping); r.clients.delete(res); });
     return;
   }
 
-  if (url === '/api/reset' && req.method === 'POST') {
-    setState('');
-    return sendJson(res, 200, { v: version });
+  if (pfad === '/api/reset' && req.method === 'POST') {
+    const r = raumVon(url);
+    setState(r, '');
+    return sendJson(res, 200, { v: r.version });
   }
 
-  if (url === '/api/health') {
-    return sendJson(res, 200, { ok: true, version, clients: clients.size,
+  if (pfad === '/api/health') {
+    let clients = 0;
+    for (const r of raeume.values()) clients += r.clients.size;
+    return sendJson(res, 200, { ok: true, version: raumVon(url).version, clients,
+                                raeume: [...raeume.keys()].map(n => n || 'schach'),
                                 uptime: Math.round(process.uptime()) });
   }
 
@@ -161,17 +193,20 @@ const server = http.createServer((req, res) => {
   serveFile(req, res, url);
 });
 
+holeRaum('');                             // Schach-Stand gleich beim Start laden
+
 server.listen(PORT, HOST, () => {
-  console.log('Schach-Server auf http://' + HOST + ':' + PORT);
+  console.log('Spiele-Server auf http://' + HOST + ':' + PORT);
   console.log('Dateien aus ' + ROOT);
-  console.log('Spielstand in ' + STATE_FILE);
-  console.log('Historie in ' + HIST_FILE);
+  console.log('Spielstände neben ' + STATE_FILE);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
-    try { fs.writeFileSync(STATE_FILE, state); } catch (e) {}
-    try { fs.writeFileSync(HIST_FILE, hist); } catch (e) {}
+    for (const r of raeume.values()) {
+      try { fs.writeFileSync(r.stateFile, r.state); } catch (e) {}
+      try { fs.writeFileSync(r.histFile, r.hist); } catch (e) {}
+    }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
   });

@@ -114,6 +114,9 @@ Einstellungen stehen in `/etc/systemd/system/offline-chess.service`:
 | `STATE_FILE` | Datei für den Spielstand | `/var/lib/offline-chess/state.txt` |
 | `HIST_FILE` | Datei für die Historie | neben `STATE_FILE` als `hist.txt` |
 
+Die Dateien weiterer Spiele entstehen daneben, mit dem Namen des Spiels im
+Dateinamen (`state-vier.txt`).
+
 Nach Änderungen `systemctl daemon-reload && systemctl restart offline-chess`.
 
 ## Schnittstellen
@@ -127,6 +130,11 @@ Nach Änderungen `systemctl daemon-reload && systemctl restart offline-chess`.
 | `GET /api/events` | Server-Sent Events, schiebt jede Änderung sofort |
 | `POST /api/reset` | Spielstand leeren (alle Plätze frei) |
 | `GET /api/health` | Zustand des Dienstes, Anzahl Verbindungen |
+
+Jedes Spiel hat seinen eigenen Stand. `?spiel=vier` an einem dieser Pfade
+liest und schreibt `state-vier.txt` bzw. `hist-vier.txt`; ohne den Parameter
+bleibt es bei `state.txt` – so, wie es das Schachspiel seit jeher aufruft.
+Erlaubt sind ein bis acht Kleinbuchstaben oder Ziffern.
 
 Hängt eine Partie fest, hilft:
 
@@ -150,6 +158,6 @@ antwortet, und fällt sonst auf den Hotseat-Betrieb zurück.
 
 ## Sicherung
 
-Zu sichern ist nur `/var/lib/offline-chess/state.txt` – und das auch nur,
+Zu sichern ist nur `/var/lib/offline-chess/state*.txt` – und das auch nur,
 wenn eine laufende Partie überleben soll. In Proxmox genügt ein normaler
 Container-Snapshot.

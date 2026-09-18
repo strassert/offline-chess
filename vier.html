@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Vier gewinnt</title>
+<style>
+  :root{
+    --brett:#2b5fb8; --loch:#171a21; --rot:#e5484d; --gelb:#f5c344;
+    --bg:#20232a; --panel:#2b2f38; --text:#f2efe7; --accent:#6fae5f;
+    --pad:14px; --gap:20px; --panelw:250px;
+    --vh:100vh;              /* Handy-Browser: sichtbare Höhe ohne Adressleiste */
+  }
+  @supports (height:100dvh){ :root{ --vh:100dvh; } }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg); color:var(--text); font-family:Segoe UI,Arial,sans-serif;
+    display:flex; align-items:center; justify-content:center; height:100%;
+    padding:var(--pad); overflow:hidden;
+    user-select:none; -webkit-user-select:none;
+  }
+  /* ---------- Größe ----------
+     Alles hängt an --bs, der Breite des Bretts. Anders als beim Schach ist es
+     nicht quadratisch: 7 Spalten zu 6 Reihen, die Höhe folgt daraus. Begrenzt
+     wird --bs von dem, was das Fenster hergibt - nebeneinander von der Höhe
+     (mal 7/6) oder der um das Panel verringerten Breite, untereinander von der
+     Breite. Dadurch wächst und schrumpft die Oberfläche beim Ziehen am Fenster
+     ohne Zutun von JavaScript. */
+  .app{
+    --bs: max(266px, min( calc((var(--vh) - 2*var(--pad)) * 7 / 6),
+                          calc(100vw - var(--panelw) - var(--gap) - 2*var(--pad)),
+                          900px ));
+    --zelle: calc(var(--bs) / 7);
+    display:flex; gap:var(--gap); align-items:center; justify-content:center;
+  }
+  .boardwrap{position:relative; flex:0 0 auto;}
+  #board{
+    display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
+    width:var(--bs); height:calc(var(--bs) * 6 / 7);
+    background:var(--brett); padding:calc(var(--zelle)/14);
+    border-radius:calc(var(--zelle)/5);
+    box-shadow:0 10px 30px rgba(0,0,0,.5), inset 0 2px 0 rgba(255,255,255,.12);
+    touch-action:manipulation; overflow:hidden;
+  }
+  .cell{position:relative; display:flex; align-items:center; justify-content:center;
+    cursor:pointer;}
+  .stein{width:80%; aspect-ratio:1; border-radius:50%; background:var(--loch);
+    box-shadow:inset 0 calc(var(--zelle)/22) calc(var(--zelle)/11) rgba(0,0,0,.75);}
+  .stein.r{background:radial-gradient(circle at 34% 30%, #ff7b7e, var(--rot) 62%);
+    box-shadow:inset 0 calc(var(--zelle)/-22) calc(var(--zelle)/14) rgba(0,0,0,.35);}
+  .stein.g{background:radial-gradient(circle at 34% 30%, #ffe08a, var(--gelb) 62%);
+    box-shadow:inset 0 calc(var(--zelle)/-22) calc(var(--zelle)/14) rgba(0,0,0,.3);}
+  /* Der frisch gelegte Stein fällt von oben herein. --fall ist die Zahl der
+     Felder über ihm; ein Feld misst 100/80 der Steinhöhe. */
+  @keyframes fallen{ from{ transform:translateY(calc(var(--fall) * -125%)); }
+                     to{ transform:none; } }
+  .stein.neu{ animation:fallen .34s cubic-bezier(.45,.03,.8,.66); }
+  /* Die vier, die gewonnen haben */
+  .stein.sieg{ box-shadow:0 0 0 calc(var(--zelle)/16) #fff,
+                          0 0 calc(var(--zelle)/4) rgba(255,255,255,.75);
+               animation:pochen 1.6s ease-in-out infinite; }
+  @keyframes pochen{ 50%{ transform:scale(1.06); } }
+  /* Vorschau: wohin der eigene Stein fiele */
+  .stein.vor{ opacity:.42; }
+  .cell.spalte{ background:rgba(255,255,255,.07); }
+  .cell.letzter::after{ content:''; position:absolute; width:22%; aspect-ratio:1;
+    border-radius:50%; background:rgba(255,255,255,.55); pointer-events:none; }
+  /* Empfehlung der Auswertung für Zuschauer */
+  .cell.tipp .stein{ box-shadow:inset 0 0 0 calc(var(--zelle)/18) #5b9ad5; }
+  #board.gesperrt .cell{ cursor:default; }
+
+  .panel{background:var(--panel); border-radius:12px; padding:18px 20px;
+    width:var(--panelw); height:calc(var(--bs) * 6 / 7); flex:0 0 auto;
+    display:flex; flex-direction:column; overflow:auto;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  h1{font-size:22px; margin:0 0 4px;}
+  .sub{opacity:.6; font-size:12px; margin-bottom:14px;}
+  .status{font-size:16px; font-weight:600; min-height:44px; padding:10px 12px;
+    background:#1c1f26; border-radius:8px; margin-bottom:14px; display:flex;
+    align-items:center; gap:10px;}
+  .turnDot{width:16px; height:16px; border-radius:50%; border:2px solid #888; flex:0 0 auto;}
+  .btn{display:block; width:100%; padding:11px; margin-top:8px; border:0; border-radius:8px;
+    font-size:14px; font-weight:600; cursor:pointer; background:var(--accent); color:#0e1a09;}
+  .btn.sec{background:#3a3f4a; color:var(--text);}
+  .btn:active{transform:translateY(1px);}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .moves{margin-top:16px; flex:1; min-height:0; overflow:auto; font-size:13px;
+    font-family:Consolas,monospace; background:#1c1f26; border-radius:8px; padding:8px 10px;}
+  .moves div{padding:2px 0; display:flex; gap:8px;}
+  .moves .n{opacity:.5; width:26px;}
+  .moves .sp{width:52px;}
+  .moves .q{font-weight:700;}
+  .players{margin:10px 0 4px;}
+  .players .pl{padding:7px 10px; margin-bottom:6px;
+    background:#1c1f26; border-radius:8px; font-size:13px;}
+  .players .pl.turn{background:#243026; box-shadow:inset 0 0 0 1px rgba(111,174,95,.5);}
+  .players .plhead{display:flex; align-items:center; gap:8px;}
+  .players .dotc{width:12px; height:12px; border-radius:50%; border:1px solid #777; flex:0 0 auto;}
+  .players .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .players .clk{font-family:Consolas,monospace; font-size:15px; font-weight:700;}
+  .players .clk.low{color:var(--rot);}
+  .specs{margin-top:10px; font-size:12px; opacity:.6; line-height:1.5;}
+  .evalbox{margin-top:10px; background:#1c1f26; border-radius:8px; padding:8px 10px;}
+  .evalbar{height:10px; border-radius:5px; background:var(--gelb); overflow:hidden;
+    box-shadow:inset 0 0 0 1px #4a505c;}
+  .evalbar .fill{height:100%; width:50%; background:var(--rot); transition:width .25s;}
+  .evalhead{display:flex; justify-content:space-between; align-items:baseline; margin-top:6px;}
+  .evalhead #evalScore{font-family:Consolas,monospace; font-size:15px; font-weight:700;}
+  .evalhead #evalDepth{font-size:11px; opacity:.5;}
+  .evalbest{margin-top:5px; font-size:13px; font-weight:700; color:#5b9ad5; min-height:17px;}
+  .evallast{margin-top:6px; font-size:12px; font-weight:700; min-height:16px;}
+  .q-best{color:#7fd88f;} .q-good{color:#9fd3a6;} .q-inac{color:#f0c14b;}
+  .q-mist{color:#f09145;} .q-blun{color:#ff6b6b;}
+  .q-brill{color:#26c2a3;} .q-great{color:#5b9ad5;} .q-miss{color:#e07a5f;}
+  .undoask{margin-top:8px; background:#2f2a1c; border-radius:8px; padding:9px 10px;
+    box-shadow:inset 0 0 0 1px rgba(246,224,94,.4);}
+  .undoask .txt{font-size:12px; margin-bottom:6px;}
+  .undoask .row{display:flex; gap:6px;}
+  .undoask .btn{margin-top:0; padding:8px 0; font-size:12px;}
+  .lobby input{width:100%; padding:10px 12px; margin-bottom:2px; font-size:14px;
+    border-radius:8px; border:1px solid #4a505c; background:#1c1f26; color:var(--text);}
+  .lobby .lbl{display:block; text-align:left; font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; opacity:.5; margin:12px 0 5px;}
+  .seatrow{display:flex; gap:8px;}
+  .seat{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:10px 6px; border-radius:8px; border:1px solid #4a505c; cursor:pointer;
+    background:#1c1f26; color:var(--text); font-size:13px; font-weight:600;}
+  .seat .chip{width:20px; height:20px; border-radius:50%; border:1px solid #6b7280;}
+  .seat .chip.cr{background:var(--rot);} .seat .chip.cg{background:var(--gelb);}
+  .seat .who{font-size:11px; font-weight:400; opacity:.6; min-height:14px;}
+  .seat.on{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent);}
+  .seat:disabled{opacity:.45; cursor:not-allowed;}
+  .tcrow{display:flex; gap:8px; margin-bottom:14px;}
+  .tc{flex:1; padding:10px 4px; border-radius:8px; border:1px solid #4a505c;
+    cursor:pointer; background:#1c1f26; color:var(--text); font-size:13px;
+    font-weight:600; white-space:nowrap;}
+  .tc.on{background:var(--accent); color:#0e1a09; border-color:var(--accent);}
+  .lobby{position:fixed; inset:0; background:rgba(16,18,23,.88); display:none;
+    align-items:center; justify-content:center; z-index:10; padding:12px; overflow:auto;}
+  .lobby.on{display:flex;}
+  .lobby .card{background:var(--panel); border-radius:14px;
+    padding:clamp(18px,4vw,28px) clamp(16px,4vw,32px);
+    width:min(340px,100%); max-height:calc(var(--vh) - 24px); overflow:auto;
+    text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  .lobby h2{margin:0 0 6px; font-size:24px;}
+  .lobby p{margin:0 0 18px; opacity:.65; font-size:13px;}
+  .lobby .msg{min-height:18px; margin-top:12px; font-size:12px; color:var(--gelb);}
+  .btn.link{background:none; color:var(--text); opacity:.5; font-weight:400;
+    font-size:12px; padding:6px;}
+  .histbox{margin-top:8px; text-align:left; max-height:min(210px,32vh); overflow:auto;}
+  .histleer{font-size:12px; opacity:.4; padding:6px 2px;}
+  .histtabs{display:flex; gap:6px; margin-top:16px;}
+  .httab{flex:1; padding:7px 0; border-radius:7px; border:1px solid #4a505c;
+    background:#1c1f26; color:var(--text); font-size:12px; cursor:pointer;}
+  .httab.on{background:#3a3f4a; border-color:#6b7280;}
+  .histttl{font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    opacity:.5; margin-bottom:6px;}
+  .histrow{display:grid; grid-template-columns:1fr auto; gap:1px 10px;
+    padding:5px 7px; border-radius:6px; font-size:12px; margin-bottom:2px;}
+  .histrow:nth-child(even){background:#1c1f26;}
+  .histrow .hn{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600;}
+  .histrow .hr{font-family:Consolas,monospace; font-weight:700; text-align:right;}
+  .histrow .hr.d{opacity:.6; font-weight:400;}
+  .histrow .hmeta{grid-column:1/3; opacity:.45; font-size:11px;}
+  .histrow.rank{grid-template-columns:18px 1fr auto;}
+  .histrow.rank .hpos{opacity:.4; font-family:Consolas,monospace;}
+  .histrow.rank .hmeta{grid-column:2/4;}
+  .histrow.prov{opacity:.6;}
+  .histwarn{font-size:11px; line-height:1.4; color:var(--gelb); background:#2f2a1c;
+    border-radius:6px; padding:7px 8px; margin-bottom:8px;}
+  .netbox{margin-top:10px; background:#1c1f26; border-radius:8px; padding:7px 9px;
+    cursor:default;}
+  .netline{display:flex; align-items:center; gap:7px;}
+  .netdot{width:9px; height:9px; border-radius:50%; background:#6b7280; flex:0 0 auto;}
+  .netdot.ok{background:#7fd88f;} .netdot.weak{background:#f0c14b;}
+  .netdot.down{background:#ff6b6b;} .netdot.init{background:#6b7280;}
+  .nettxt{flex:1; font-size:12px; font-weight:600;}
+  .netbtn{background:none; border:0; color:var(--text); opacity:.5; cursor:pointer;
+    font-size:15px; line-height:1; padding:2px 4px; border-radius:5px;}
+  .netbtn:hover{opacity:1; background:#3a3f4a;}
+  .netbtn.busy{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .netsub{font-size:11px; opacity:.5; margin-top:3px; min-height:14px;}
+  .recap{z-index:11;}                 /* Auswertung liegt über der Lobby */
+  .recap .card{width:min(460px,100%);}
+  .recapchart{background:#1c1f26; border-radius:8px; padding:6px; margin-bottom:14px;}
+  .recapchart svg{display:block; width:100%; height:70px;}
+  .recaptable{width:100%; font-size:13px; margin-bottom:16px;}
+  .recaptable .rrow{display:grid; grid-template-columns:1fr 62px 62px;
+    gap:6px; padding:5px 8px; align-items:center;}
+  .recaptable .rrow.head{font-size:11px; letter-spacing:.05em; text-transform:uppercase;
+    opacity:.5;}
+  .recaptable .rrow.acc{background:#1c1f26; border-radius:8px; margin-bottom:6px;
+    font-weight:700; font-size:15px;}
+  .recaptable .num{text-align:center; font-family:Consolas,monospace;}
+  .recaptable .lab{text-align:left; opacity:.75;}
+  .recaptable .rrow.key{font-size:12px; grid-template-columns:1fr 60px;}
+  .review .rvbar{height:10px; border-radius:5px; background:var(--gelb); overflow:hidden;
+    box-shadow:inset 0 0 0 1px #4a505c;}
+  .review .rvbar .fill{height:100%; background:var(--rot); transition:width .2s;}
+  .review .rvhead{display:flex; justify-content:space-between; margin-top:6px;
+    font-family:Consolas,monospace; font-size:15px; font-weight:700;}
+  .review .rvhead #rvCount{font-size:12px; font-weight:400; opacity:.5;}
+  .review .rvmove{margin-top:8px; font-size:13px; font-weight:700; min-height:18px;}
+  .review .rvbest{font-size:12px; opacity:.7; min-height:16px; font-family:Consolas,monospace;}
+  .review .rvnav{display:flex; gap:6px; margin-top:10px;}
+  .review .rvnav .btn{margin-top:0; padding:9px 0; font-size:13px;}
+
+  /* ---------- Hochformat und schmale Fenster ----------
+     Sobald das Fenster höher als breit oder einfach schmal ist, rutscht das
+     Panel unter das Brett und die Seite wird gescrollt. */
+  @media (max-aspect-ratio:9/10), (max-width:600px){
+    body{display:block; overflow:auto; height:auto; min-height:100%;
+         padding:var(--pad) var(--pad) calc(24px + env(safe-area-inset-bottom));}
+    .app{
+      --bs: max(266px, min( calc(100vw - 2*var(--pad)), 640px,
+                            calc((var(--vh) - 210px) * 7 / 6) ));
+      flex-direction:column; align-items:center; gap:14px; margin:0 auto;
+      width:max-content; max-width:100%;
+    }
+    .panel{width:var(--bs); max-width:100%; height:auto; overflow:visible;
+           padding:14px 16px;}
+    h1{font-size:20px;}
+    .sub{margin-bottom:10px;}
+    .moves{flex:0 0 auto; max-height:min(200px,26vh);}
+    .status{min-height:0;}
+  }
+  @media (min-aspect-ratio:9/10) and (max-width:1000px){
+    :root{--panelw:220px; --gap:14px;}
+  }
+  @media (min-aspect-ratio:9/10) and (max-height:560px) and (min-width:601px){
+    :root{--panelw:210px; --pad:8px; --gap:12px;}
+    .panel{padding:12px 13px;}
+    h1{font-size:18px; margin-bottom:2px;}
+    .sub{margin-bottom:8px;}
+  }
+  @media (hover:none){
+    .btn{padding:13px;}
+    .seat{padding:12px 6px;}
+    .tc{padding:12px 4px;}
+    .netbtn{padding:6px 8px; font-size:17px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="boardwrap">
+    <div id="board"></div>
+  </div>
+  <div class="panel">
+    <h1>Vier gewinnt</h1>
+    <div class="sub">Hotseat &middot; 2 Spieler &middot; offline</div>
+    <div class="status"><span class="turnDot" id="turnDot"></span><span id="status">Rot am Zug</span></div>
+    <div class="players" id="players"></div>
+    <div class="review" id="review" style="display:none">
+      <div class="rvbar"><div class="fill" id="rvFill"></div></div>
+      <div class="rvhead"><span id="rvScore">50 %</span><span id="rvCount">0 / 0</span></div>
+      <div class="rvmove" id="rvMove"></div>
+      <div class="rvbest" id="rvBest"></div>
+      <div class="rvnav">
+        <button class="btn sec" id="rvFirst">⏮</button>
+        <button class="btn sec" id="rvPrev">◀</button>
+        <button class="btn sec" id="rvNext">▶</button>
+        <button class="btn sec" id="rvLast">⏭</button>
+      </div>
+      <button class="btn sec" id="rvExit">Durchgehen beenden</button>
+    </div>
+    <button class="btn sec" id="recapBtn" style="display:none">Auswertung</button>
+    <button class="btn" id="newBtn">Neues Spiel</button>
+    <button class="btn sec" id="undoBtn">Zug zurück</button>
+    <button class="btn sec" id="leaveBtn" style="display:none">Platz freigeben</button>
+
+    <div class="undoask" id="undoAsk" style="display:none">
+      <div class="txt" id="undoTxt"></div>
+      <div class="row">
+        <button class="btn" id="undoYes">Annehmen</button>
+        <button class="btn sec" id="undoNo">Ablehnen</button>
+      </div>
+    </div>
+    <div class="evalbox" id="evalBox" style="display:none">
+      <div class="evalbar"><div class="fill" id="evalFill"></div></div>
+      <div class="evalhead"><span id="evalScore">…</span><span id="evalDepth"></span></div>
+      <div class="evalbest" id="evalBest"></div>
+      <div class="evallast" id="evalLast"></div>
+    </div>
+    <div class="specs" id="specs"></div>
+    <div class="moves" id="moves"></div>
+    <div class="netbox" id="netBox" style="display:none">
+      <div class="netline">
+        <span class="netdot" id="netDot"></span>
+        <span class="nettxt" id="netTxt">Verbinde …</span>
+        <button class="netbtn" id="netBtn" title="Verbindung neu aufbauen">↻</button>
+      </div>
+      <div class="netsub" id="netSub"></div>
+    </div>
+  </div>
+</div>
+<div class="lobby recap" id="recap">
+  <div class="card">
+    <h2 id="recapTitle">Partie beendet</h2>
+    <p id="recapSub">Auswertung läuft …</p>
+    <div class="recapchart" id="recapChart"></div>
+    <div class="recaptable" id="recapTable"></div>
+    <div class="histbox" id="recapHist"></div>
+    <button class="btn" id="recapReview">Partie durchgehen</button>
+    <button class="btn sec" id="recapClose">Schließen</button>
+  </div>
+</div>
+<div class="lobby" id="lobby">
+  <div class="card">
+    <h2>Vier gewinnt</h2>
+    <p id="lobbyStep">Name, Farbe und Bedenkzeit wählen</p>
+
+    <label class="lbl" for="nameInput">Name</label>
+    <input id="nameInput" maxlength="12" placeholder="Dein Name" autocomplete="off">
+
+    <label class="lbl">Farbe</label>
+    <div class="seatrow">
+      <button class="seat" id="seatR" data-col="r">
+        <span class="chip cr"></span><span class="st">Rot</span><span class="who"></span>
+      </button>
+      <button class="seat" id="seatG" data-col="g">
+        <span class="chip cg"></span><span class="st">Gelb</span><span class="who"></span>
+      </button>
+    </div>
+
+    <label class="lbl">Bedenkzeit</label>
+    <div class="tcrow" id="tcRow">
+      <button class="tc" data-tc="60+5">1 + 5</button>
+      <button class="tc on" data-tc="180+2">3 + 2</button>
+      <button class="tc" data-tc="300+0">5 Min</button>
+    </div>
+
+    <button class="btn" id="lobbyStart" style="display:none">Spiel starten</button>
+    <button class="btn sec" id="seatV">Nur zuschauen</button>
+    <button class="btn sec" id="lobbyLeave" style="display:none">Platz freigeben</button>
+    <div class="msg" id="lobbyMsg"></div>
+    <div class="histtabs">
+      <button class="httab on" data-tab="games">Partien</button>
+      <button class="httab" data-tab="board">Rangliste</button>
+    </div>
+    <div class="histbox" id="lobbyHist"></div>
+    <button class="btn link" id="resetSeats">Plätze zurücksetzen</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------------------------------------------------------------
+   Vier gewinnt - Einzeldatei, keine Abhängigkeiten. Aufbau und
+   Synchronisation folgen chess.html: dieselbe Lobby, dieselben
+   Transporte (Steuerung / Server / zwei Tabs), dieselbe Uhr.
+   Eigen ist die Bewertung: sie steckt hier im Programm selbst,
+   eine Engine-Datei wie beim Schach braucht es nicht.
+   --------------------------------------------------------------- */
+
+/* ---------- Brett und Regeln ----------
+   42 Felder, Index = Spalte*6 + Reihe, Reihe 0 ist unten. Das ist die
+   Ordnung, in der auch der Löser rechnet - so wird nirgends umgerechnet. */
+const COLS=7, ROWS=6, FELDER=COLS*ROWS;
+const FARBEN={r:'Rot', g:'Gelb'};
+const gegner=(p)=>p==='r'?'g':'r';
+
+let state, history, mySide=null, localOver=false;
+let animiert=-1;                  // bis zu diesem Zug ist der Fall schon gelaufen
+
+function neueStellung(){
+  return {feld:new Int8Array(FELDER), hoehe:new Int8Array(COLS), turn:'r'};
+}
+const stein=(st,c,r)=>st.feld[c*ROWS+r];      // 0 leer, 1 Rot, 2 Gelb
+const codeVon=(p)=>p==='r'?1:2;
+const farbeVon=(v)=>v===1?'r':v===2?'g':'';
+
+/* Die vier in einer Reihe, die der Stein bei (c,r) vollendet - oder null */
+const DC=[0,1,1,1], DR=[1,0,1,-1];
+function viererBei(st,c,r){
+  const v=stein(st,c,r);
+  if(!v) return null;
+  for(let i=0;i<4;i++){
+    const felder=[c*ROWS+r];
+    for(let s=-1;s<=1;s+=2){
+      let cc=c+DC[i]*s, rr=r+DR[i]*s;
+      while(cc>=0&&cc<COLS&&rr>=0&&rr<ROWS&&st.feld[cc*ROWS+rr]===v){
+        felder.push(cc*ROWS+rr); cc+=DC[i]*s; rr+=DR[i]*s;
+      }
+    }
+    if(felder.length>=4) return felder;
+  }
+  return null;
+}
+function moeglich(st,c){ return c>=0&&c<COLS&&st.hoehe[c]<ROWS; }
+/* Einen Stein legen. Gibt Reihe und - falls damit gewonnen ist - die Vierer
+   zurück. Der Zustand wird dabei verändert; Kopien macht stellungBei(). */
+function lege(st,c){
+  const r=st.hoehe[c];
+  st.feld[c*ROWS+r]=codeVon(st.turn);
+  st.hoehe[c]++;
+  const sieg=viererBei(st,c,r);
+  const p=st.turn;
+  st.turn=gegner(p);
+  return {c,r,p,sieg};
+}
+function kopie(st){
+  const n=neueStellung();
+  n.feld.set(st.feld); n.hoehe.set(st.hoehe); n.turn=st.turn;
+  return n;
+}
+/* Stellung nach den ersten k Zügen - für Durchgehen und Auswertung */
+function stellungBei(k){
+  const st=neueStellung();
+  for(let i=0;i<k&&i<history.length;i++) lege(st,history[i].c);
+  return st;
+}
+const gewinner=()=>{
+  const h=history[history.length-1];
+  return (h&&h.sieg)?h.p:'';
+};
+const vollesBrett=()=>history.length>=FELDER;
+const partieVorbei=()=>!!gewinner()||vollesBrett();
+
+function neuesSpielStill(){
+  state=neueStellung(); history=[]; animiert=-1;
+}
+function newGame(){
+  neuesSpielStill();
+  localOver=false; recapData=null; quality=[]; reviewIdx=null;
+  hideRecap(); renderReview();
+  phase='setup'; result=''; resCode='';
+  const b=tcParts().base; clock={r:b,g:b}; clockAt=Date.now();
+  render(); Sync.publish(); renderPlayers(); syncLobby();
+}
+
+/* ---------- Anzeige ---------- */
+const boardEl=document.getElementById('board');
+const statusEl=document.getElementById('status');
+const turnDot=document.getElementById('turnDot');
+const movesEl=document.getElementById('moves');
+let vorschau=-1;                  // Spalte unter dem Zeigegerät
+
+const FARBWERT={r:'#e5484d', g:'#f5c344'};
+
+function darfZiehen(){
+  if(reviewIdx!==null) return false;
+  if(partieVorbei()) return false;
+  if(Sync.transport && phase!=='run') return false;
+  if(mySide==='v') return false;
+  if(mySide && mySide!==state.turn) return false;
+  return true;
+}
+
+function render(){
+  const rev=(reviewIdx!==null&&recapData);
+  const view=rev?recapData.stellungen[reviewIdx]:state;
+  const letzter=rev ? (reviewIdx>0?history[reviewIdx-1]:null)
+                    : (history.length?history[history.length-1]:null);
+  const sieg=letzter&&letzter.sieg?letzter.sieg:null;
+  // Nur ein wirklich neuer Zug fällt; sonst liefe die Bewegung bei jedem
+  // Auffrischen der Anzeige erneut los.
+  const fallend=(!rev&&history.length&&animiert!==history.length-1)
+                ? history[history.length-1] : null;
+  if(fallend) animiert=history.length-1;
+
+  boardEl.innerHTML='';
+  boardEl.classList.toggle('gesperrt',!darfZiehen());
+  for(let r=ROWS-1;r>=0;r--) for(let c=0;c<COLS;c++){
+    const zelle=document.createElement('div');
+    zelle.className='cell'; zelle.dataset.c=c; zelle.dataset.r=r;
+    const s=document.createElement('div');
+    const v=view.feld[c*ROWS+r];
+    s.className='stein '+(farbeVon(v)||'');
+    if(sieg&&sieg.indexOf(c*ROWS+r)>=0) s.classList.add('sieg');
+    if(fallend&&fallend.c===c&&fallend.r===r){
+      s.classList.add('neu'); s.style.setProperty('--fall',String(ROWS-r));
+    }
+    if(letzter&&letzter.c===c&&letzter.r===r&&!sieg) zelle.classList.add('letzter');
+    zelle.appendChild(s);
+    zelle.addEventListener('click',()=>onSpalte(c));
+    boardEl.appendChild(zelle);
+  }
+  zeigeVorschau(vorschau);
+  renderTipp();
+
+  const amZug=FARBEN[state.turn];
+  turnDot.style.background=FARBWERT[state.turn];
+  const sg=gewinner();
+  if(Sync.transport && phase==='over' && result){
+    statusEl.textContent=result;
+  } else if(Sync.transport && phase==='setup'){
+    statusEl.textContent=(seats.r&&seats.g)?'Bereit – Spiel starten':'Warte auf Mitspieler …';
+  } else if(sg){
+    statusEl.textContent=(namen(sg))+' gewinnt!';
+  } else if(vollesBrett()){
+    statusEl.textContent='Unentschieden – das Brett ist voll.';
+  } else if(mySide==='v'){
+    statusEl.textContent=amZug+' am Zug';
+  } else if(mySide){
+    statusEl.textContent=(mySide===state.turn)?'Du bist am Zug':'Gegner am Zug';
+  } else {
+    statusEl.textContent=amZug+' am Zug';
+  }
+  renderMoves(); renderUndo(); renderPlayers(); updateEval();
+}
+/* Wohin der eigene Stein fiele. Ohne Neuaufbau des Bretts - der würde die
+   fallende Bewegung abschneiden, sobald die Maus darüber wandert. */
+function zeigeVorschau(c){
+  for(const el of boardEl.querySelectorAll('.cell.spalte')) el.classList.remove('spalte');
+  for(const el of boardEl.querySelectorAll('.stein.vor')){
+    el.classList.remove('vor','r','g');
+  }
+  if(c<0||!darfZiehen()||!moeglich(state,c)) return;
+  const farbe=mySide&&mySide!=='v'?mySide:state.turn;
+  for(const el of boardEl.querySelectorAll('.cell[data-c="'+c+'"]')) el.classList.add('spalte');
+  const ziel=boardEl.querySelector('.cell[data-c="'+c+'"][data-r="'+state.hoehe[c]+'"] .stein');
+  if(ziel){ ziel.classList.add('vor',farbe); }
+}
+boardEl.addEventListener('mousemove',(e)=>{
+  const z=e.target.closest ? e.target.closest('.cell') : null;
+  const c=z?+z.dataset.c:-1;
+  if(c!==vorschau){ vorschau=c; zeigeVorschau(c); }
+});
+boardEl.addEventListener('mouseleave',()=>{ vorschau=-1; zeigeVorschau(-1); });
+
+function renderMoves(){
+  movesEl.innerHTML='';
+  for(let i=0;i<history.length;i+=2){
+    const row=document.createElement('div');
+    const n=document.createElement('span'); n.className='n'; n.textContent=(i/2+1)+'.';
+    row.appendChild(n); row.appendChild(zugSpan(i));
+    if(history[i+1]) row.appendChild(zugSpan(i+1));
+    movesEl.appendChild(row);
+  }
+  movesEl.scrollTop=movesEl.scrollHeight;
+}
+function zugSpan(i){
+  const el=document.createElement('span');
+  el.className='sp';
+  el.textContent='Sp '+(history[i].c+1);
+  const q=quality[i];
+  if(q&&q.s){ const s=document.createElement('span');
+              s.className='q '+q.c; s.textContent=q.s; el.appendChild(s); }
+  return el;
+}
+
+function onSpalte(c){
+  if(!darfZiehen()) return;
+  if(!moeglich(state,c)) return;
+  zieh(c);
+}
+/* Spalten 1-7 auch über die Tastatur. Nicht, während jemand seinen Namen
+   tippt - dort sind Ziffern erlaubte Zeichen. */
+const imFeld=(e)=>{
+  const t=e.target;
+  return !!t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);
+};
+document.addEventListener('keydown',(e)=>{
+  if(reviewIdx!==null||imFeld(e)) return;
+  const n=parseInt(e.key,10);
+  if(n>=1&&n<=7&&darfZiehen()&&moeglich(state,n-1)){ zieh(n-1); e.preventDefault(); }
+});
+
+/* Ein Zug: legen, Ende prüfen, Uhr abrechnen, veröffentlichen */
+function zieh(c){
+  const zug=lege(state,c);
+  history.push(zug);
+  if(Sync.suppress) return;
+  undoReq='';                                 // ein Zug beendet jede Anfrage
+  chargeClock(zug.p);
+  if(zug.sieg){
+    finishGame(namen(zug.p)+' gewinnt – vier in einer Reihe', zug.p);
+    if(!Sync.transport) localOver=true;
+  } else if(vollesBrett()){
+    finishGame('Unentschieden – das Brett ist voll','d');
+    if(!Sync.transport) localOver=true;
+  }
+  render(); Sync.publish();
+  if(partieVorbei()) runRecap();
+}
+
+/* Die letzten n Züge zurücknehmen */
+function undoZuege(n){
+  if(!history.length) return;
+  const behalten=history.slice(0,Math.max(0,history.length-n)).map(h=>h.c);
+  Sync.suppress=true;
+  neuesSpielStill();
+  for(const c of behalten) zieh(c);
+  Sync.suppress=false;
+  animiert=history.length-1;                  // nichts nachträglich fallen lassen
+}
+/* Im Netzbetrieb ist die Rücknahme eine Bitte an den Gegner; im Hotseat
+   sitzen beide vor demselben Brett und nehmen den Zug direkt zurück. */
+function undo(){
+  if(!history.length) return;
+  if(Sync.transport){
+    if(mySide!=='r'&&mySide!=='g') return;
+    if(phase!=='run'||undoReq) return;
+    undoReq=mySide; Sync.publish(); render(); renderUndo();
+    return;
+  }
+  undoZuege(1);
+  // Im Hotseat macht die Rücknahme ein beendetes Spiel wieder zu einem laufenden
+  if(!partieVorbei()){ localOver=false; result=''; resCode=''; if(phase==='over') phase='setup'; }
+  render(); Sync.publish();
+}
+function undoAccept(){
+  if(!undoReq||undoReq===mySide) return;
+  undoZuege(state.turn===undoReq?2:1);        // so weit, dass der Bittende dran ist
+  undoReq=''; render(); Sync.publish(); renderUndo();
+}
+function undoDecline(){
+  if(!undoReq||undoReq===mySide) return;
+  undoReq=''; Sync.publish(); render(); renderUndo();
+}
+function renderUndo(){
+  const box=document.getElementById('undoAsk');
+  const btn=document.getElementById('undoBtn');
+  if(!box) return;
+  const sitzt=(mySide==='r'||mySide==='g');
+  const gefragt=!!undoReq&&!!Sync.transport;
+  box.style.display=(gefragt&&sitzt&&undoReq!==mySide)?'block':'none';
+  if(gefragt&&sitzt&&undoReq!==mySide)
+    document.getElementById('undoTxt').textContent=
+      namen(undoReq)+' bittet um Rücknahme des Zuges.';
+  if(btn&&Sync.transport){
+    const meine=(gefragt&&undoReq===mySide);
+    btn.disabled=meine||!sitzt||phase!=='run'||!history.length;
+    btn.textContent=meine?'Rücknahme angefragt …':'Zug zurück';
+  }
+}
+
+/* ---------- Verbindung: Zustand, Laufzeit, Wiederverbinden ----------
+   Die Transporte melden jeden Zugriff hierher. Daraus entsteht die Anzeige
+   im Panel - und die Möglichkeit, von Hand neu aufzusetzen. */
+const Net={
+  mode:'', lastOk:0, rtt:0, avg:0, queued:0,
+  okR:0, badR:0, okW:0, badW:0,
+  reconnect:null,
+  cut:null,                    // {pv,cap,need}: Stand passt nicht in die Variable
+  readOk(ms){ this.okR++; this.lastOk=Date.now(); this.rtt=ms;
+              this.avg=this.avg?Math.round(this.avg*0.7+ms*0.3):ms; },
+  readFail(){ this.badR++; },
+  writeOk(){ this.okW++; this.lastOk=Date.now(); },
+  writeFail(){ this.badW++; },
+  state(){
+    if(this.cut) return 'down';
+    if(!this.lastOk) return 'init';
+    const age=Date.now()-this.lastOk;
+    if(age>30000||Sync.fails>=6) return 'down';
+    if(age>8000||Sync.fails>=2) return 'weak';
+    if(this.queued && Date.now()-this.queued>6000) return 'weak';
+    return 'ok';
+  }
+};
+function fmtAge(ms){
+  const s=Math.round(ms/1000);
+  return s<2?'gerade eben':(s<60?('vor '+s+' s'):('vor '+Math.round(s/60)+' min'));
+}
+function renderNet(){
+  const box=document.getElementById('netBox');
+  if(!box) return;
+  if(!Sync.transport){ box.style.display='none'; return; }
+  box.style.display='block';
+  const st=Net.state();
+  const dot=document.getElementById('netDot');
+  const txt=document.getElementById('netTxt');
+  const sub=document.getElementById('netSub');
+  dot.className='netdot '+st;
+  /* Sonderfall mit eigener Auskunft: Der Stand kommt gekürzt zurück. "Gestört"
+     würde hier in die Irre führen - an der Leitung ist nichts zu tun, jede
+     einzelne Anfrage ist schnell und erfolgreich. */
+  if(Net.cut){
+    txt.textContent='Stand wird gekürzt';
+    sub.textContent=Net.cut.pv+': nur '+Net.cut.cap+' von '+Net.cut.need+
+                    ' Zeichen kommen an';
+    box.title=Net.mode+'\nDas Schreiben wird bestätigt, zurück kommen aber nur '+
+              Net.cut.cap+' Zeichen - beide Seiten sehen dann verschiedene Bretter.\n'+
+              'Entweder fasst '+Net.cut.pv+' nicht mehr, oder der Webserver der '+
+              'Steuerung begrenzt den Wert (goform kürzt oft bei 255 Zeichen, '+
+              'unabhängig von der angelegten STRING-Länge).';
+    return;
+  }
+  txt.textContent = st==='init' ? 'Verbinde …'
+                  : st==='ok'   ? 'Verbunden'
+                  : st==='weak' ? 'Gestört'
+                  :               'Getrennt';
+  const bits=[];
+  const wartet=Net.queued&&Date.now()-Net.queued>2000;
+  if(Net.avg) bits.push(Net.avg+' ms');
+  if(!wartet&&Net.lastOk) bits.push('Abgleich '+fmtAge(Date.now()-Net.lastOk));
+  if(st!=='ok'&&Sync.fails)
+    bits.push(Sync.fails+(Sync.fails===1?' Fehlversuch':' Fehlversuche'));
+  if(wartet) bits.push('Zug wird übertragen …');
+  sub.textContent=bits.join(' · ');
+  box.title=Net.mode+'  gelesen '+Net.okR+' ok / '+Net.badR+' Fehler'+
+            '\ngeschrieben '+Net.okW+' ok / '+Net.badW+' Fehler'+
+            (Net.rtt?('\nletzte Laufzeit '+Net.rtt+' ms'):'');
+  if(st==='down'&&!Sync.ready) sub.textContent='Kein Kontakt zur '+Net.mode;
+}
+function renderWarn(){ renderNet(); }
+
+/* ---------- Gemeinsamer Zustand ----------
+   Plätze, Namen, Zuschauer, Zeitmodus, Restzeiten und Zugliste liegen in
+   EINER Variable:
+   "r=id:Name;g=id:Name;tc=180+2;tr=180000;tg=180000;st=run;v=id:Name|3342"
+   Die Zugliste kostet ein Zeichen je Zug und kann nie länger als 42 werden -
+   eine Momentaufnahme wie beim Schach braucht es hier nicht. */
+const seats={r:'',g:''};
+const names={r:'',g:''};
+let specs=[];
+let tc='180+2';
+let clock={r:0,g:0};
+let phase='setup';                         // setup | run | over
+let undoReq='';
+let hist=[];
+const HIST_MAX=40;
+let result='';
+/* Wer ist neuer? Nicht die längere Zugliste - eine Rücknahme verkürzt sie ja
+   gerade. Stattdessen zählt jede selbst ausgelöste Änderung einen Schritt
+   hoch, und wer empfängt, übernimmt den höheren Stand des Zählers. Damit ist
+   die Reihenfolge auch dann eindeutig, wenn ein verzögerter Schreibvorgang
+   einen alten Stand nachreicht. */
+let gen=0;
+let resCode='';                            // 'r' | 'g' | 'd' - Ausgang in einem Zeichen
+let kurzRes=false;                         // Ergebnistext passt nicht mehr mit
+let kurzZahl=false;                        // nicht einmal die Zahl der Zuschauer
+const MAXSPECS=6;                          // mehr Namen passen nicht in den Stand
+let specPlus=0;                            // bekannt, aber nicht übertragen
+let WIRE_MAX=240;
+
+function clean(s){ return String(s||'').replace(/[;:,|=<>&"'~!]/g,'').trim().slice(0,12); }
+function clean0(s){ return String(s||'').replace(/[;|<>&"']/g,'').trim().slice(0,44); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function tcParts(){ const p=tc.split('+'); return {base:(+p[0]||180)*1000, inc:(+p[1]||0)*1000}; }
+function namen(p){ return names[p]||FARBEN[p]||''; }
+
+function packGame(){ return history.map(h=>String(h.c)).join(''); }
+let sichtbareSpecs=MAXSPECS;
+function serializeState(){
+  const ent=(id,nm)=>id?(id+':'+nm):'';
+  const f=['r='+ent(seats.r,names.r), 'g='+ent(seats.g,names.g),
+           'gn='+gen, 'tc='+tc, 'tr='+Math.max(0,Math.round(clock.r)),
+           'tg='+Math.max(0,Math.round(clock.g)), 'st='+phase];
+  if(specs.length&&sichtbareSpecs>0)
+    f.push('v='+specs.slice(0,sichtbareSpecs).map(s=>s.id+':'+s.name).join(','));
+  /* Passen nicht alle Namen, geht wenigstens die Zahl mit: "und 3 weitere" ist
+     eine ehrliche Auskunft, "keine Zuschauer" wäre schlicht falsch. */
+  const ganz=specs.length+specPlus;
+  if(!kurzZahl && ganz>Math.min(sichtbareSpecs,specs.length)) f.push('vn='+ganz);
+  /* Der Ergebnistext ist das Längste im Kopf und zugleich das Entbehrlichste:
+     Aus dem Brett und einem Zeichen lässt er sich wieder aufbauen. */
+  if(result) f.push(kurzRes&&resCode ? ('rk='+resCode)
+                                     : ('res='+result.replace(/[;|]/g,'')));
+  if(undoReq) f.push('ur='+undoReq);
+  return f.join(';')+'|'+packGame();
+}
+/* Der Stand muss in die Variable der Steuerung passen. Die Zugliste ist mit
+   42 Zeichen von vornherein gedeckelt; was wachsen kann, ist der Kopf. Wird es
+   eng, wird er in dieser Reihenfolge abgeräumt - vom Entbehrlichsten zum
+   Wichtigsten. Die Zugliste steht nicht auf dieser Leiter: sie ist die Partie. */
+function wireKuerzen(){
+  sichtbareSpecs=MAXSPECS; kurzRes=false; kurzZahl=false;
+  const passt=()=>serializeState().length<=WIRE_MAX;
+  if(passt()) return;
+  while(sichtbareSpecs>0 && !passt()) sichtbareSpecs--;   // 1. Zuschauernamen
+  if(passt()) return;
+  kurzRes=true;                                           // 2. Ergebnistext als Kürzel
+  if(passt()) return;
+  kurzZahl=true;                                          // 3. Zahl der Zuschauer
+}
+/* Ergebnistext aus Brett und Kürzel. Steht der Vierer da, ist alles klar;
+   sonst hat die Uhr entschieden. */
+function textAus(code){
+  if(code==='d') return 'Unentschieden – das Brett ist voll';
+  if(code!=='r'&&code!=='g') return 'Partie beendet';
+  if(gewinner()===code) return namen(code)+' gewinnt – vier in einer Reihe';
+  return 'Zeit abgelaufen – '+namen(code)+' gewinnt';
+}
+function codeAusBrett(){
+  const sg=gewinner();
+  if(sg) return sg;
+  return vollesBrett()?'d':'';
+}
+function parseState(str){
+  const s=String(str||''), i=s.indexOf('|');
+  const out={r:'',g:'',nr:'',ng:'',specs:[],vn:0,tc:'180+2',tr:0,tg:0,st:'setup',
+             res:'',rk:'',ur:'',gen:-1, moves:i<0?s.trim():s.slice(i+1).trim()};
+  out.moves=out.moves.replace(/[^0-6]/g,'');
+  /* Ohne Trennzeichen fehlt die Zugliste. Das ist kein leeres Spiel, sondern
+     ein unterwegs abgeschnittener Kopf - seine Ziffern (Restzeiten, Zähler)
+     wären sonst plötzlich Züge. */
+  if(i<0){ out.moves=''; return out; }
+  for(const part of s.slice(0,i).split(';')){
+    const k=part.slice(0,part.indexOf('=')), v=part.slice(part.indexOf('=')+1);
+    if(k==='r'||k==='g'){ const c=v.split(':');
+      out[k]=clean(c[0]); out['n'+k]=clean(c[1]); }
+    else if(k==='v'){ out.specs=v?v.split(',').filter(Boolean).map(e=>{
+      const c=e.split(':'); return {id:clean(c[0]), name:clean(c[1])}; }):[]; }
+    else if(k==='gn') out.gen=+v||0;                 // Schrittzähler, s. oben
+    else if(k==='vn') out.vn=+v||0;                  // Zuschauer insgesamt
+    else if(k==='tc') out.tc=v||'180+2';
+    else if(k==='tr') out.tr=+v||0;
+    else if(k==='tg') out.tg=+v||0;
+    else if(k==='st') out.st=v||'setup';
+    else if(k==='res') out.res=clean0(v);
+    else if(k==='rk') out.rk=(v||'').slice(0,1);
+    else if(k==='ur') out.ur=v||'';
+  }
+  return out;
+}
+const Sync={
+  transport:null, suppress:false, last:null, fails:0,
+  oldAt:0,
+  // Denselben Stand noch einmal anbieten - ohne ihn damit zum neueren zu machen
+  again(){ if(Date.now()-this.oldAt<2000) return;
+           this.oldAt=Date.now(); this.publish(false); },
+  wieder(){ this.publish(false); },
+  ready:true,
+  publish(neu){ if(!this.transport||this.suppress) return;
+             if(neu!==false) gen++;
+             try{ wireKuerzen(); }catch(e){}
+             const s=serializeState();
+             if(!this.transport.confirms) this.last=s;
+             this.transport.send(s); },
+  receive(str){
+    if(str===this.last) return;                   // eigener Echo -> ignorieren
+    this.last=str;
+    applyState(parseState(str));
+  }
+};
+/* Nicht jede Antwort ist ein Spielstand: Der Webserver der Steuerung schickt
+   bei einem Fehler eine HTML-Seite, ein abgebrochener Zugriff gar nichts. */
+function acceptState(txt){
+  if(typeof txt!=='string') return false;
+  if(txt.indexOf('<')>=0) return false;
+  if(!txt.trim()) return !(phase==='run'&&history.length);
+  // Der Strich trennt Kopf und Zugliste. Fehlt er, ist der Stand unterwegs
+  // abgeschnitten worden - unvollständig, also unbrauchbar.
+  return txt.indexOf('|')>=0;
+}
+/* Ein empfangener Stand kann älter sein als der eigene: Schreibt die
+   Gegenseite mit veralteter Sicht, fehlt darin unser letzter Zug. Erkennbar
+   daran, dass die empfangene Zugliste ein echtes Anfangsstück der eigenen ist.
+   Weichen sie dagegen voneinander ab, hat die Gegenseite etwas anderes
+   gespielt - dann gilt ihr Stand, denn ein gemeinsames Brett zählt mehr. */
+function vorausListe(rem){
+  const g=packGame();
+  return g.length>rem.moves.length && g.indexOf(rem.moves)===0;
+}
+function outdated(txt){
+  const rem=parseState(txt);
+  // Zähler entscheidet, sobald beide Seiten ihn mitschicken
+  if(rem.gen>=0 && gen>0){
+    if(rem.gen<gen) return true;
+    if(rem.gen>gen) return false;
+    // Gleicher Schritt, andere Länge: dann war es unterwegs das Kürzen
+  }
+  if(phase!=='run'||undoReq) return false;   // Rücknahme darf verkürzen
+  if(rem.st!=='run') return false;           // Ende oder Neustart sind gewollt
+  return vorausListe(rem);
+}
+/* Gegenprobe in Ruhe: Steht drüben wirklich, was hier steht? Ging ein
+   Schreibvorgang verloren, fällt es hier auf und der eigene Stand geht
+   noch einmal raus. */
+function reconcile(){
+  if(!Sync.transport||!Sync.ready||Sync.suppress) return;
+  if(mySide!=='r'&&mySide!=='g') return;
+  /* Passt der Stand nach wie vor nicht in die Variable, hilft Senden nicht -
+     dann aber auch nicht endlos dagegen laufen. Ist er inzwischen kurz genug
+     (weil Zuschauer von der Leitung gewichen sind), muss er raus: sonst bleibt
+     drüben für immer der gekürzte Stand stehen. */
+  try{ if(Net.cut && serializeState().length>WIRE_MAX) return; }catch(e){ return; }
+  const rem=parseState(Sync.last||'');
+  const hinterUns = (rem.gen>=0&&gen>0) ? rem.gen<gen : vorausListe(rem);
+  if(hinterUns || rem[mySide]!==myId || (phase==='over'&&rem.st!=='over'))
+    Sync.wieder();
+}
+function spieleListe(s){
+  Sync.suppress=true;
+  for(const ch of String(s||'')){
+    const c=+ch;
+    if(!moeglich(state,c)) break;            // unbrauchbar: hier abbrechen
+    zieh(c);
+    if(partieVorbei()) break;
+  }
+  Sync.suppress=false;
+  animiert=history.length-2;                 // der zuletzt empfangene Zug fällt
+}
+function uebernehmeZuege(st){
+  const eigen=packGame();
+  if(st.moves===eigen) return;
+  if(st.moves.length>eigen.length && st.moves.indexOf(eigen)===0){
+    spieleListe(st.moves.slice(eigen.length));   // nur die neuen Züge anhängen
+    return;
+  }
+  neuesSpielStill();
+  spieleListe(st.moves);
+  animiert=history.length-1;                     // komplett neu aufgebaut
+}
+function applyState(st){
+  const warVorbei=(phase==='over');
+  seats.r=st.r; seats.g=st.g; names.r=st.nr; names.g=st.ng;
+  specs=st.specs; specPlus=Math.max(0,(st.vn||0)-st.specs.length);
+  tc=st.tc; phase=st.st; result=st.res; undoReq=st.ur;
+  clock.r=st.tr; clock.g=st.tg; clockAt=Date.now();
+  if(st.gen>gen) gen=st.gen;
+  uebernehmeZuege(st);
+  // Erst jetzt steht das Brett - vorher wäre der Ausgang nicht abzulesen
+  resCode=st.rk||codeAusBrett();
+  if(phase==='over'&&!result) result=textAus(resCode);
+  /* Platz nur aufgeben, wenn dort tatsächlich jemand anderes sitzt. Ist er
+     bloß leer, hat der andere Client mit veralteter Sicht veröffentlicht -
+     dann tragen wir uns einfach wieder ein. */
+  for(const col of ['r','g']){
+    if(mySide!==col) continue;
+    if(seats[col]===myId) break;
+    if(seats[col]){ leaveSeat(true); break; }
+    seats[col]=myId; names[col]=myName()||names[col];
+    Sync.publish();
+  }
+  render(); renderLobby(); syncLobby();
+  if(!warVorbei && phase==='over'){ runRecap(); refreshHist(true); }
+}
+window.VierSync=Sync;             // Zugriffspunkt für externe Transports
+
+/* ---------- Uhr ----------
+   Nur die Seite am Zug verbraucht Zeit. Jeder Client zählt lokal ab dem
+   Moment herunter, in dem er den Zustand empfangen hat (clockAt) - dadurch
+   ist keine Uhrzeit-Synchronisation zwischen den PCs nötig. */
+let clockAt=Date.now();
+function liveClock(col){
+  if(phase!=='run'||col!==state.turn) return clock[col];
+  return clock[col]-(Date.now()-clockAt);
+}
+function fmtClock(ms){
+  if(ms<0) ms=0;
+  const t=Math.ceil(ms/1000), m=Math.floor(t/60), s=t%60;
+  return m+':'+(s<10?'0':'')+s;
+}
+function chargeClock(col){
+  if(phase!=='run') return;
+  const now=Date.now();
+  clock[col]=Math.max(0,clock[col]-(now-clockAt))+tcParts().inc;
+  clockAt=now;
+}
+function startGame(){
+  const b=tcParts().base;
+  clock={r:b,g:b}; clockAt=Date.now(); phase='run'; result=''; resCode='';
+  recapData=null; quality=[]; hideRecap();
+  neuesSpielStill(); render(); renderLobby(); Sync.publish(); syncLobby();
+}
+/* Partieende an einer Stelle bündeln: Nur wer das Ende selbst auslöst,
+   schreibt den Eintrag in die Historie - die anderen bekommen ihn über den
+   geteilten Zustand und würden ihn sonst doppelt anlegen. */
+function finishGame(text,sieger){
+  phase='over'; result=text; resCode=sieger||'d';
+  pushHistory(sieger);
+}
+function endGame(text,sieger){
+  finishGame(text,sieger);
+  render(); renderLobby(); Sync.publish();
+  runRecap();
+}
+function pushHistory(sieger){
+  if(!history.length) return;
+  hist.unshift({r:namen('r'), g:namen('g'), e:sieger||'d', n:history.length,
+                t:Math.floor(Date.now()/60000).toString(36)});
+  hist=hist.slice(0,HIST_MAX);
+  if(Sync.transport) storeHist(); else saveLocalHist();
+  renderHist();
+}
+function saveLocalHist(){
+  try{ localStorage.setItem('vierHist',JSON.stringify(hist)); }catch(e){}
+}
+function loadLocalHist(){
+  try{ const v=localStorage.getItem('vierHist');
+       if(v) hist=JSON.parse(v).slice(0,HIST_MAX); }catch(e){}
+}
+function tickClocks(){
+  if(!Sync.transport) return;
+  renderPlayers();
+  if(phase!=='run') return;
+  const t=state.turn, rest=liveClock(t);
+  if(rest>0) return;
+  // Der Spieler am Zug meldet selbst; ist sein PC weg, meldet der Gegner nach 5 s
+  const ich=(mySide===t), warte=(mySide&&mySide!=='v'&&mySide!==t&&rest<=-5000);
+  if(ich||warte){
+    clock[t]=0;
+    endGame('Zeit abgelaufen – '+namen(gegner(t))+' gewinnt', gegner(t));
+  }
+}
+setInterval(tickClocks,200);
+
+/* Jeder Zugriff braucht eine Zeitgrenze - ohne sie kann ein hängender
+   Aufruf für immer offen bleiben und den Ablauf blockieren. */
+function fetchT(url,opt,ms){
+  const ac=new AbortController();
+  const t=setTimeout(()=>ac.abort(),ms||6000);
+  return fetch(url,Object.assign({signal:ac.signal},opt||{}))
+    .finally(()=>clearTimeout(t));
+}
+
+/* ---------- Historie in eigener Ablage ----------
+   Getrennt vom Spielstand: sie ändert sich nur am Partieende und darf
+   deshalb viel mehr Partien fassen. */
+const Hist={ load:null, save:null, at:0, broken:false, hint:'', err:'', name:'' };
+function histToText(){ return hist.map(e=>[e.r,e.g,e.e,e.n,e.t].join('~')).join('!'); }
+function histFromText(v){
+  hist=(v||'').split('!').filter(Boolean).map(e=>{
+    const c=e.split('~');
+    return {r:clean(c[0]),g:clean(c[1]),e:(c[2]||'').slice(0,1),
+            n:+c[3]||0,t:(c[4]||'').slice(0,8)};
+  }).slice(0,HIST_MAX);
+}
+async function refreshHist(force){
+  if(!Hist.load) return;
+  const now=Date.now();
+  if(!force && now-Hist.at<5000) return;
+  Hist.at=now;
+  let v;
+  try{ v=await Hist.load(); }
+  catch(e){
+    Hist.broken=true; Hist.err=String(e&&e.message||e);
+    if(!hist.length) loadLocalHist();
+    renderHist(); return;
+  }
+  if(typeof v!=='string' || v.indexOf('<')>=0) return;
+  const t=v.trim();
+  // Eine leere Ablage darf einen vorhandenen Stand nicht löschen - sie wird
+  // stattdessen nachgeschrieben.
+  if(!t){ if(hist.length) storeHist(); return; }
+  Hist.broken=false;
+  histFromText(t); renderHist();
+}
+async function storeHist(){
+  if(!Hist.save) return;
+  Hist.at=Date.now();
+  try{ await Hist.save(histToText()); Hist.broken=false; }
+  catch(e){ Hist.broken=true; Hist.err=String(e&&e.message||e);
+            saveLocalHist(); renderHist(); }
+}
+
+/* ---------- Spieler-Panel ---------- */
+function renderPlayers(){
+  const el=document.getElementById('players');
+  if(!el) return;
+  if(reviewIdx!==null){ el.style.display='none'; return; }
+  el.style.display='';
+  const netz=!!Sync.transport;
+  el.innerHTML='';
+  for(const col of ['r','g']){
+    const row=document.createElement('div');
+    row.className='pl'+(col===state.turn&&(!netz||phase==='run')&&!partieVorbei()?' turn':'');
+    const head=document.createElement('div'); head.className='plhead';
+    const dot=document.createElement('span'); dot.className='dotc';
+    dot.style.background=FARBWERT[col];
+    const nm=document.createElement('span'); nm.className='nm';
+    nm.textContent = netz ? (names[col]||(seats[col]?'Spieler':'frei'))+
+                            (seats[col]===myId?' (du)':'')
+                          : FARBEN[col];
+    head.appendChild(dot); head.appendChild(nm);
+    if(netz){
+      const ck=document.createElement('span'); ck.className='clk';
+      const ms=liveClock(col); ck.textContent=fmtClock(ms);
+      if(phase==='run'&&ms<30000) ck.classList.add('low');
+      head.appendChild(ck);
+    }
+    row.appendChild(head);
+    el.appendChild(row);
+  }
+  const rb=document.getElementById('recapBtn');
+  const vorbei=netz?(phase==='over'):localOver;
+  if(rb) rb.style.display=(vorbei&&history.length)?'block':'none';
+  const sp=document.getElementById('specs');
+  if(!netz){ sp.textContent=''; return; }
+  const weitere=specPlus?((specs.length?' und ':'')+specPlus+' weitere'):'';
+  sp.textContent = (specs.length||specPlus)
+    ? ('Zuschauer: '+specs.map(s=>s.name||'Gast').join(', ')+weitere)
+    : 'Keine Zuschauer';
+  renderTC();
+}
+function renderTC(){
+  for(const btn of document.querySelectorAll('.tc'))
+    btn.classList.toggle('on',btn.dataset.tc===tc);
+}
+function setTC(v){
+  if(phase==='run') return;
+  tc=v; const b=tcParts().base; clock={r:b,g:b}; clockAt=Date.now();
+  renderTC(); renderPlayers(); renderLobby();
+  if(mySide==='r'||mySide==='g') Sync.publish();
+}
+
+/* ---------- Löser ----------
+   Alpha-Beta über dieselbe Felderordnung wie das Brett. Gerechnet wird
+   auf eigenen Feldern, nicht auf dem angezeigten Zustand - die Suche legt
+   und nimmt Millionen von Steinen.
+
+   Drei Dinge tragen die Geschwindigkeit:
+     - Mitte zuerst: dort entstehen die meisten Vierer, das schneidet früh ab.
+     - Wer sofort gewinnen kann, gewinnt - keine weitere Suche nötig.
+     - Droht der Gegner an zwei Stellen, ist die Stellung verloren; droht er
+       an einer, ist der Zug erzwungen. Zwangszüge kosten keine Tiefe, sonst
+       endete die Suche mitten in der Abwicklung.
+   Ohne Fund eines Gewinns entscheidet eine Stellungsbewertung: offene Dreier
+   wiegen schwer, wenn ihr freies Feld erreichbar ist, die Mitte zählt mit. */
+const SIEG=10000;
+const MITTE=[3,2,4,1,5,0,6];
+const FENSTER=(()=>{                       // alle 69 Vierer-Fenster, einmal vorab
+  const out=[], idx=(c,r)=>c*ROWS+r;
+  for(let c=0;c<COLS;c++) for(let r=0;r<ROWS;r++){
+    if(c+3<COLS) out.push([idx(c,r),idx(c+1,r),idx(c+2,r),idx(c+3,r)]);
+    if(r+3<ROWS) out.push([idx(c,r),idx(c,r+1),idx(c,r+2),idx(c,r+3)]);
+    if(c+3<COLS&&r+3<ROWS) out.push([idx(c,r),idx(c+1,r+1),idx(c+2,r+2),idx(c+3,r+3)]);
+    if(c+3<COLS&&r-3>=0)   out.push([idx(c,r),idx(c+1,r-1),idx(c+2,r-2),idx(c+3,r-3)]);
+  }
+  return out;
+})();
+const sFeld=new Int8Array(FELDER), sHoehe=new Int8Array(COLS);
+let sGelegt=0, sAmZug=1, sKnoten=0, sBudget=0, sAus=false;
+
+function sSetzen(zuege){
+  sFeld.fill(0); sHoehe.fill(0); sGelegt=0; sAmZug=1;
+  for(const c of zuege){ sFeld[c*ROWS+sHoehe[c]]=sAmZug; sHoehe[c]++; sGelegt++;
+                         sAmZug=3-sAmZug; }
+}
+function sGewinnt(c,r,p){
+  for(let i=0;i<4;i++){
+    let n=1; const dc=DC[i], dr=DR[i];
+    for(let s=-1;s<=1;s+=2){
+      let cc=c+dc*s, rr=r+dr*s;
+      while(cc>=0&&cc<COLS&&rr>=0&&rr<ROWS&&sFeld[cc*ROWS+rr]===p){
+        n++; cc+=dc*s; rr+=dr*s;
+      }
+    }
+    if(n>=4) return true;
+  }
+  return false;
+}
+function siegtMit(c,p){                    // gewinnt p mit dem nächsten Stein dort?
+  if(sHoehe[c]>=ROWS) return false;
+  const r=sHoehe[c];
+  sFeld[c*ROWS+r]=p;
+  const w=sGewinnt(c,r,p);
+  sFeld[c*ROWS+r]=0;
+  return w;
+}
+function heuristik(p){
+  const o=3-p;
+  let s=0;
+  for(let i=0;i<FENSTER.length;i++){
+    const w=FENSTER[i];
+    let a=0,b=0;
+    for(let k=0;k<4;k++){ const v=sFeld[w[k]]; if(v===p) a++; else if(v===o) b++; }
+    if(a&&b) continue;
+    if(a===3||b===3){
+      let frei=-1;
+      for(let k=0;k<4;k++) if(!sFeld[w[k]]) frei=w[k];
+      const nah=(frei%ROWS)<=sHoehe[(frei/ROWS)|0];
+      s+=(a===3?1:-1)*(nah?8:3);
+    } else if(a===2) s+=2;
+    else if(b===2) s-=2;
+  }
+  for(let r=0;r<ROWS;r++){ const v=sFeld[3*ROWS+r]; if(v===p) s+=3; else if(v===o) s-=3; }
+  /* Gedeckelt, und zwar deutlich unter dem, was 100 % ergäbe: Eine geschätzte
+     Stellung darf nie so aussehen wie ein ausgerechneter Gewinn. */
+  return Math.max(-80,Math.min(80,s));
+}
+function negamax(depth,alpha,beta){
+  if(++sKnoten>sBudget){ sAus=true; return 0; }
+  const me=sAmZug, du=3-me;
+  for(let i=0;i<COLS;i++) if(siegtMit(MITTE[i],me)) return SIEG-(sGelegt+1);
+  if(sGelegt>=FELDER) return 0;
+  if(depth<=0) return heuristik(me);
+  let droht=-1, zweite=false;
+  for(let i=0;i<COLS;i++){
+    if(!siegtMit(i,du)) continue;
+    if(droht<0) droht=i; else { zweite=true; break; }
+  }
+  if(zweite) return -(SIEG-(sGelegt+2));
+  const zuege=[];
+  if(droht>=0) zuege.push(droht);                  // Zwangszug: blocken
+  else for(let i=0;i<COLS;i++){
+    const c=MITTE[i];
+    if(sHoehe[c]>=ROWS) continue;
+    /* Der eigene Stein öffnet dem Gegner das Feld darüber. Wo er dort
+       gewinnt, ist der Zug verloren - eine einzige Probe genügt. */
+    const r=sHoehe[c];
+    sFeld[c*ROWS+r]=me; sHoehe[c]++;
+    const schlecht=siegtMit(c,du);
+    sHoehe[c]--; sFeld[c*ROWS+r]=0;
+    if(!schlecht) zuege.push(c);
+  }
+  if(!zuege.length) return -(SIEG-(sGelegt+2));     // jeder Zug verliert
+  let best=-SIEG*2;
+  for(let i=0;i<zuege.length;i++){
+    const c=zuege[i], r=sHoehe[c];
+    sFeld[c*ROWS+r]=me; sHoehe[c]++; sGelegt++; sAmZug=du;
+    const v=-negamax(droht>=0?depth:depth-1,-beta,-alpha);
+    sAmZug=me; sGelegt--; sHoehe[c]--; sFeld[c*ROWS+r]=0;
+    if(sAus) return 0;
+    if(v>best) best=v;
+    if(best>alpha) alpha=best;
+    if(alpha>=beta) break;
+  }
+  return best;
+}
+/* Beste Spalte und Wert - iterativ vertiefend, bis das Knotenbudget
+   aufgebraucht ist. Das Budget begrenzt die Rechenzeit verlässlicher als
+   eine feste Tiefe: entschiedene Stellungen sind sofort fertig, offene
+   bekommen so viel Tiefe, wie in die Zeit passt. */
+function bewerte(zuege,maxKnoten,maxTiefe){
+  sSetzen(zuege);
+  sBudget=maxKnoten||80000; sKnoten=0;
+  let erg={wert:0, best:-1, spitze:0, tiefe:0};
+  for(let t=2;t<=(maxTiefe||16);t+=2){
+    sAus=false;
+    const werte=[];
+    const me=sAmZug;
+    for(let i=0;i<COLS;i++){
+      const c=MITTE[i];
+      if(sHoehe[c]>=ROWS) continue;
+      const r=sHoehe[c];
+      sFeld[c*ROWS+r]=me; sHoehe[c]++; sGelegt++; sAmZug=3-me;
+      let v;
+      if(sGewinnt(c,r,me)) v=SIEG-sGelegt;
+      else{
+        let verliert=false;
+        for(let k=0;k<COLS&&!verliert;k++) if(siegtMit(k,3-me)) verliert=true;
+        /* Volles Fenster: Jede Spalte bekommt ihren wirklichen Wert, nicht
+           bloß die Auskunft "nicht besser als die bisher beste". Nur so ist
+           der Abstand zur zweitbesten belastbar - und die Wurzel hat sieben
+           Züge, das kostet nichts. */
+        v=verliert ? -(SIEG-(sGelegt+1)) : -negamax(t-1,-SIEG*2,SIEG*2);
+      }
+      sAmZug=me; sGelegt--; sHoehe[c]--; sFeld[c*ROWS+r]=0;
+      if(sAus) break;
+      werte.push({c,v});
+    }
+    if(sAus||!werte.length) break;
+    werte.sort((a,b)=>b.v-a.v);
+    // Bleibt nur eine Spalte, gab es nichts zu wählen - das ist keine Leistung
+    erg={wert:werte[0].v, best:werte[0].c, tiefe:t,
+         spitze:werte.length>1?(chance(werte[0].v)-chance(werte[1].v)):0};
+    if(Math.abs(erg.wert)>SIEG-100) break;           // entschieden
+  }
+  return erg;
+}
+/* Vom Stellungswert zur Gewinnaussicht. Für Vier gewinnt ist ein Prozentwert
+   die ehrlichere Auskunft als eine Zahl wie "+0,56": erzwungene Gewinne sind
+   ohnehin absolut, dazwischen ist alles Schätzung. */
+function chance(v){
+  if(v>SIEG-100) return 100;
+  if(v<-(SIEG-100)) return 0;
+  return 50+50*(2/(1+Math.exp(-0.055*v))-1);
+}
+const entschieden=(v)=>Math.abs(v)>SIEG-100;
+/* Bei welchem Stein der Vierer fällt - daraus wird, wie viele Züge es von
+   jetzt an noch dauert. */
+const siegBeiStein=(v)=>SIEG-Math.abs(v);
+
+/* Wert einer Stellung aus Sicht von Rot. Steht das Ergebnis schon fest,
+   fragt niemand die Suche. */
+function bewerteStellung(zuege,knoten,tiefe){
+  const st=neueStellung();
+  let ende=null;
+  for(const c of zuege){
+    if(!moeglich(st,c)) break;
+    const z=lege(st,c);
+    if(z.sieg){ ende=z.p; break; }
+  }
+  if(ende) return {rot:(ende==='r')?SIEG:-SIEG, best:-1, spitze:100, tiefe:0, fertig:true};
+  if(st.hoehe[0]+st.hoehe[1]+st.hoehe[2]+st.hoehe[3]+st.hoehe[4]+st.hoehe[5]+
+     st.hoehe[6]>=FELDER)
+    return {rot:0, best:-1, spitze:0, tiefe:0, fertig:true};
+  const e=bewerte(zuege,knoten,tiefe);
+  const vz=(st.turn==='r')?1:-1;
+  return {rot:e.wert*vz, best:e.best, spitze:e.spitze, tiefe:e.tiefe, fertig:false};
+}
+
+/* ---------- Bewertung für Zuschauer ----------
+   Wie beim Schach: Spieler bekommen sie nicht zu sehen, sonst wäre es keine
+   Partie mehr. Gerechnet wird ein kleines Budget - das bleibt flüssig. */
+const LIVE_KNOTEN=70000, RECAP_KNOTEN=120000;
+let evalCur={zuege:null, rot:0, best:-1, tiefe:0};
+let evalVorZug=-1;                 // Zugzahl, zu der evalCur gehörte
+let quality=[];
+let tipp=-1;
+function classify(drop){
+  if(drop<2)  return {t:'Bester Zug', s:'',   c:'q-best'};
+  if(drop<10) return {t:'Gut',        s:'',   c:'q-good'};
+  if(drop<20) return {t:'Ungenau',    s:'?!', c:'q-inac'};
+  if(drop<30) return {t:'Fehler',     s:'?',  c:'q-mist'};
+  return             {t:'Grober Fehler', s:'??', c:'q-blun'};
+}
+function zeigeEval(){
+  const box=document.getElementById('evalBox');
+  if(!box||box.style.display==='none') return;
+  const p=chance(evalCur.rot);
+  document.getElementById('evalFill').style.width=p.toFixed(0)+'%';
+  const sc=document.getElementById('evalScore');
+  if(entschieden(evalCur.rot)){
+    const rest=Math.max(1,siegBeiStein(evalCur.rot)-history.length);
+    sc.textContent=(evalCur.rot>0?'Rot':'Gelb')+' gewinnt in '+
+                   rest+(rest===1?' Zug':' Zügen');
+  }
+  else sc.textContent='Rot '+p.toFixed(0)+' %';
+  document.getElementById('evalDepth').textContent=
+    evalCur.tiefe?('Tiefe '+evalCur.tiefe):'';
+  document.getElementById('evalBest').textContent=
+    evalCur.best>=0?('Beste Spalte: '+(evalCur.best+1)):'';
+  zeigeLetzteEinstufung();
+}
+function zeigeLetzteEinstufung(){
+  const el=document.getElementById('evalLast');
+  if(!el) return;
+  const q=quality[history.length-1];
+  el.className='evallast '+(q?q.c:'');
+  el.textContent=q?('Letzter Zug: '+q.t):'';
+}
+function renderTipp(){
+  for(const el of boardEl.querySelectorAll('.cell.tipp')) el.classList.remove('tipp');
+  if(tipp<0||mySide!=='v'||reviewIdx!==null||partieVorbei()) return;
+  if(!moeglich(state,tipp)) return;
+  const z=boardEl.querySelector('.cell[data-c="'+tipp+'"][data-r="'+state.hoehe[tipp]+'"]');
+  if(z) z.classList.add('tipp');
+}
+/* Nach jedem Zug neu rechnen - aber nur, wenn jemand zusieht. */
+function updateEval(){
+  const box=document.getElementById('evalBox');
+  if(!box) return;
+  const will=(mySide==='v'&&!!Sync.transport&&reviewIdx===null);
+  box.style.display=will?'block':'none';
+  if(!will){ tipp=-1; return; }
+  const zuege=history.map(h=>h.c);
+  const schluessel=zuege.join('');
+  if(evalCur.zuege===schluessel){ zeigeEval(); return; }
+  const vorher=evalCur.zuege===null?null:evalCur.rot;
+  const e=bewerteStellung(zuege,LIVE_KNOTEN);
+  evalCur={zuege:schluessel, rot:e.rot, best:e.best, tiefe:e.tiefe};
+  tipp=e.best;
+  // Einstufung des gerade gespielten Zuges - nur wenn die Vorgängerstellung
+  // aus derselben Partie stammt, sonst verglichen wir Äpfel mit Birnen.
+  if(vorher!==null && history.length && evalVorZug===history.length-1){
+    const zieher=history[history.length-1].p;
+    const vor=(zieher==='r')?chance(vorher):100-chance(vorher);
+    const nach=(zieher==='r')?chance(e.rot):100-chance(e.rot);
+    quality[history.length-1]=classify(Math.max(0,vor-nach));
+    renderMoves();
+  }
+  evalVorZug=history.length;
+  zeigeEval(); renderTipp();
+}
+
+/* ---------- Auswertung nach der Partie ----------
+   Jeder Client rechnet sie selbst; die Engine läuft erst nach Spielende und
+   hilft während der Partie also niemandem. Zwischen den Stellungen wird die
+   Kontrolle abgegeben, damit die Seite bedienbar bleibt. */
+let recapData=null, recapRun=false;
+function winPct(v){ return chance(v); }
+function moveAccuracy(drop){
+  return Math.max(0,Math.min(100,103.1668*Math.exp(-0.04354*drop)-3.1669));
+}
+async function runRecap(){
+  if(recapRun) return;
+  recapRun=true;
+  const zuege=history.map(h=>h.c);
+  const stellungen=[];
+  for(let k=0;k<=zuege.length;k++) stellungen.push(stellungBei(k));
+  showRecap({busy:true,done:0,total:zuege.length+1});
+  const werte=[], bests=[], spitzen=[];
+  for(let k=0;k<=zuege.length;k++){
+    const e=bewerteStellung(zuege.slice(0,k),RECAP_KNOTEN);
+    werte.push(e.rot); bests.push(e.best); spitzen.push(e.spitze);
+    showRecap({busy:true,done:k+1,total:zuege.length+1});
+    await new Promise(r=>setTimeout(r,0));      // Anzeige darf nachziehen
+  }
+  const leer=()=>({acc:[],n:0,brill:0,best:0,good:0,inac:0,miss:0,mist:0,blun:0,
+                   ph:{o:[],m:[],e:[]}});
+  const st={r:leer(), g:leer()};
+  const marks=[], drops=[];
+  for(let i=0;i<zuege.length;i++){
+    const zieher=(i%2===0)?'r':'g', s=st[zieher];
+    const pct=v=>(zieher==='r')?winPct(v):100-winPct(v);
+    const vor=pct(werte[i]), nach=pct(werte[i+1]);
+    const istBest=(bests[i]>=0&&zuege[i]===bests[i]);
+    // Wer die von der Suche beste Spalte spielt, verliert definitionsgemäß
+    // nichts - sonst bestraft die stellungsweise Analyse ihre eigene Empfehlung.
+    const drop=istBest?0:Math.max(0,vor-nach);
+    drops.push(drop);
+    s.acc.push(moveAccuracy(drop)); s.n++;
+    let q;
+    // Verpasster Sieg: Der Gewinn stand fest und ist nach dem Zug weg.
+    if(vor>=99 && nach<90){ q={t:'Verpasster Sieg',s:'?',c:'q-miss'}; s.miss++; }
+    /* Glanzzug: die einzige Spalte, die die Stellung hält oder gewinnt - und
+       das war vorher nicht schon entschieden. Den letzten Stein in eine
+       gewonnene Stellung zu setzen ist richtig, aber keine Leistung. */
+    else if(istBest && drop<2 && spitzen[i]>=35 && vor>=45 && vor<95){
+      q={t:'Glanzzug',s:'!!',c:'q-brill'}; s.brill++;
+    }
+    else{
+      q=classify(drop);
+      if(drop<2) s.best++; else if(drop<10) s.good++;
+      else if(drop<20) s.inac++; else if(drop<30) s.mist++; else s.blun++;
+    }
+    marks.push(q);
+    // Partiephase: die ersten zwölf Steine sind Eröffnung, ab 28 Endspiel
+    const ph=(i<12)?'o':(i<28?'m':'e');
+    s.ph[ph].push(moveAccuracy(drop));
+  }
+  const mit=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+  const key=drops.map((d,i)=>({i,d})).filter(x=>x.d>=10)
+    .sort((a,b)=>b.d-a.d).slice(0,3).sort((a,b)=>a.i-b.i);
+  recapData={werte,bests,stellungen,marks,drops,st,key,
+    accR:mit(st.r.acc), accG:mit(st.g.acc),
+    phR:{o:mit(st.r.ph.o),m:mit(st.r.ph.m),e:mit(st.r.ph.e)},
+    phG:{o:mit(st.g.ph.o),m:mit(st.g.ph.m),e:mit(st.g.ph.e)}};
+  quality=marks;
+  renderMoves();
+  recapRun=false;
+  showRecap({});
+}
+/* Verlauf der Gewinnaussicht aus Sicht von Rot */
+function evalChart(werte){
+  if(!werte||werte.length<2) return '';
+  const W=390,H=70;
+  const x=i=>i*(W/(werte.length-1));
+  const y=v=>H-(chance(v)/100)*H;
+  let d='M0 '+y(werte[0]).toFixed(1);
+  werte.forEach((v,i)=>{ d+=' L'+x(i).toFixed(1)+' '+y(v).toFixed(1); });
+  const flaeche=d+' L'+W+' '+H+' L0 '+H+' Z';
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
+    '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#f5c344"/>'+
+    '<path d="'+flaeche+'" fill="#e5484d"/>'+
+    '<line x1="0" y1="'+H/2+'" x2="'+W+'" y2="'+H/2+'" stroke="#1c1f26" '+
+    'stroke-width="1" stroke-dasharray="4 3"/></svg>';
+}
+function showRecap(o){
+  const box=document.getElementById('recap');
+  if(!box) return;
+  box.classList.add('on');
+  renderHist(); refreshHist();
+  document.getElementById('recapTitle').textContent=result||'Partie beendet';
+  const sub=document.getElementById('recapSub');
+  const chart=document.getElementById('recapChart');
+  const tab=document.getElementById('recapTable');
+  if(o.busy){ sub.textContent='Werte Partie aus … '+o.done+'/'+o.total;
+              chart.innerHTML=''; tab.innerHTML=''; return; }
+  if(!recapData){ sub.textContent=''; return; }
+  const d=recapData;
+  sub.textContent=history.length+' Züge';
+  chart.innerHTML=evalChart(d.werte);
+  chart.onclick=(ev)=>{ const b=chart.getBoundingClientRect();
+    const k=Math.round((ev.clientX-b.left)/b.width*(d.werte.length-1));
+    startReview(); reviewGo(k); };
+  const nm=c=>esc(namen(c));
+  const zeile=(lab,a,b,cls)=>(a||b)?'<div class="rrow"><span class="lab '+(cls||'')+
+    '">'+lab+'</span><span class="num">'+a+'</span><span class="num">'+b+
+    '</span></div>':'';
+  const ph=(lab,a,b)=>'<div class="rrow"><span class="lab">'+lab+
+    '</span><span class="num">'+(a?a.toFixed(0):'–')+'</span><span class="num">'+
+    (b?b.toFixed(0):'–')+'</span></div>';
+  const r=d.st.r, g=d.st.g;
+  tab.innerHTML=
+    '<div class="rrow head"><span></span><span class="num">'+nm('r')+
+      '</span><span class="num">'+nm('g')+'</span></div>'+
+    '<div class="rrow acc"><span class="lab">Genauigkeit</span>'+
+      '<span class="num">'+d.accR.toFixed(1)+'</span>'+
+      '<span class="num">'+d.accG.toFixed(1)+'</span></div>'+
+    zeile('Glanzzug !!',r.brill,g.brill,'q-brill')+
+    zeile('Bester Zug',r.best,g.best,'q-best')+
+    zeile('Gut',r.good,g.good,'q-good')+
+    zeile('Ungenau ?!',r.inac,g.inac,'q-inac')+
+    zeile('Verpasster Sieg',r.miss,g.miss,'q-miss')+
+    zeile('Fehler ?',r.mist,g.mist,'q-mist')+
+    zeile('Grober Fehler ??',r.blun,g.blun,'q-blun')+
+    /* Phasen erst, wenn die Partie überhaupt eine zweite erreicht hat -
+       sonst stehen dort nur Striche. */
+    (history.length>12?('<div class="rrow head" style="margin-top:8px"><span>Phasen</span>'+
+      '<span class="num">'+nm('r')+'</span><span class="num">'+nm('g')+'</span></div>'+
+      ph('Eröffnung',d.phR.o,d.phG.o)+ph('Mittelspiel',d.phR.m,d.phG.m)+
+      (history.length>28?ph('Endspiel',d.phR.e,d.phG.e):'')):'')+
+    (d.key.length?('<div class="rrow head" style="margin-top:8px">'+
+      '<span>Schlüsselmomente</span></div>'+
+      d.key.map(k=>{
+        const n=Math.floor(k.i/2)+1, punkt=(k.i%2)?'…':'.';
+        const q=d.marks[k.i];
+        return '<div class="rrow key"><span class="lab '+q.c+'">'+n+punkt+' Spalte '+
+          (history[k.i]?history[k.i].c+1:'?')+' – '+esc(q.t)+'</span>'+
+          '<span class="num" style="grid-column:span 2">−'+k.d.toFixed(0)+'%</span>'+
+          '</div>';
+      }).join('')):'');
+}
+function hideRecap(){ const b=document.getElementById('recap'); if(b) b.classList.remove('on'); }
+
+/* ---------- Vergangene Partien und Rangliste ---------- */
+function histHtml(){
+  if(!hist.length) return '';
+  const wann=t=>{
+    const ms=parseInt(t,36)*60000;
+    if(!ms) return '';
+    const d=new Date(ms), z=n=>(n<10?'0':'')+n;
+    return z(d.getDate())+'.'+z(d.getMonth()+1)+'. '+z(d.getHours())+':'+z(d.getMinutes());
+  };
+  const punkte=e=>e==='r'?'1–0':e==='g'?'0–1':'½–½';
+  return '<div class="histttl">Letzte Partien</div>'+hist.map(e=>
+    '<div class="histrow"><span class="hn">'+esc(e.r)+' – '+esc(e.g)+'</span>'+
+    '<span class="hr '+(e.e==='d'?'d':'')+'">'+punkte(e.e)+'</span>'+
+    '<span class="hmeta">'+e.n+' Züge · '+wann(e.t)+'</span></div>').join('');
+}
+function leaderboard(){
+  const m=new Map();
+  const add=(name,pts)=>{
+    if(!name) return;
+    const s=m.get(name)||{n:0,pts:0,w:0,d:0,l:0};
+    s.n++; s.pts+=pts;
+    if(pts===1) s.w++; else if(pts===0.5) s.d++; else s.l++;
+    m.set(name,s);
+  };
+  for(const e of hist){
+    add(e.r, e.e==='r'?1:e.e==='d'?0.5:0);
+    add(e.g, e.e==='g'?1:e.e==='d'?0.5:0);
+  }
+  return [...m.entries()]
+    .map(([name,s])=>({name,n:s.n,pts:s.pts,w:s.w,d:s.d,l:s.l,
+                       rate:s.n?s.pts/s.n*100:0}))
+    .sort((a,b)=>b.rate-a.rate || b.n-a.n || a.name.localeCompare(b.name));
+}
+function boardHtml(){
+  const rows=leaderboard();
+  if(!rows.length) return '';
+  return '<div class="histttl">Rangliste nach Siegquote</div>'+
+    rows.map((r,i)=>
+      '<div class="histrow rank'+(r.n<3?' prov':'')+'">'+
+      '<span class="hpos">'+(i+1)+'</span>'+
+      '<span class="hn">'+esc(r.name)+'</span>'+
+      '<span class="hr">'+r.rate.toFixed(0)+'%</span>'+
+      '<span class="hmeta">'+r.n+' Partien · '+r.w+'S '+r.d+'R '+r.l+'N'+
+      (r.n<3?' · noch wenige':'')+'</span></div>').join('');
+}
+let histTab='games';
+function renderHist(){
+  const html=(histTab==='board')?boardHtml():histHtml();
+  const warn=Hist.broken?'<div class="histwarn">Historie kann nicht gespeichert '+
+    'werden'+(Hist.err?' ('+esc(Hist.err)+')':'')+'. '+esc(Hist.hint)+
+    ' Bis dahin merkt sie sich dieser Browser.</div>':'';
+  const leer=hist.length?'':'<div class="histleer">Noch keine Partien gespielt.</div>';
+  for(const id of ['lobbyHist','recapHist']){
+    const el=document.getElementById(id);
+    if(el) el.innerHTML=warn+(html||leer);
+  }
+  for(const b of document.querySelectorAll('.httab'))
+    b.classList.toggle('on',b.dataset.tab===histTab);
+}
+
+/* ---------- Partie durchgehen ---------- */
+let reviewIdx=null;
+function startReview(){
+  if(!recapData) return;
+  hideRecap(); hideLobby(); reviewIdx=history.length; renderReview(); render();
+}
+function endReview(){ reviewIdx=null; renderReview(); render(); syncLobby(); }
+function reviewGo(n){
+  if(reviewIdx===null||!recapData) return;
+  reviewIdx=Math.max(0,Math.min(history.length,n));
+  renderReview(); render();
+}
+function renderReview(){
+  const box=document.getElementById('review');
+  if(!box) return;
+  const an=(reviewIdx!==null&&!!recapData);
+  box.style.display=an?'block':'none';
+  const pl=document.getElementById('players');
+  if(pl) pl.style.display=an?'none':'';
+  if(!an) return;
+  const d=recapData, i=reviewIdx-1;
+  const v=d.werte[reviewIdx];
+  document.getElementById('rvCount').textContent=reviewIdx+' / '+history.length;
+  document.getElementById('rvScore').textContent=
+    entschieden(v) ? ((v>0?'Rot':'Gelb')+' gewinnt')
+                   : ('Rot '+chance(v).toFixed(0)+' %');
+  document.getElementById('rvFill').style.width=chance(v).toFixed(0)+'%';
+  const mv=document.getElementById('rvMove'), best=document.getElementById('rvBest');
+  if(i>=0){
+    const q=d.marks[i], n=Math.floor(i/2)+1, punkt=(i%2)?'…':'.';
+    mv.className='rvmove '+q.c;
+    mv.textContent=n+punkt+' Spalte '+(history[i].c+1)+' – '+q.t;
+    const b=d.bests[i];
+    best.textContent=(b<0||b===history[i].c)?'':'besser: Spalte '+(b+1);
+  }else{
+    mv.className='rvmove'; mv.textContent='Ausgangsstellung'; best.textContent='';
+  }
+}
+
+/* ---------- Lobby: Platz wählen oder zuschauen ---------- */
+let myId=null;
+try{
+  myId=sessionStorage.getItem('vierId');
+  if(!myId){ myId='p'+Math.random().toString(36).slice(2,8);
+             sessionStorage.setItem('vierId',myId); }
+}catch(e){ myId='p'+Math.random().toString(36).slice(2,8); }
+
+const lobbyEl=document.getElementById('lobby');
+const leaveBtn=document.getElementById('leaveBtn');
+let lobbyMsg='';
+
+function seatFree(col){ return !seats[col] || seats[col]===myId; }
+function showLobby(){ if(lobbyEl) lobbyEl.classList.add('on'); renderLobby(); refreshHist(); }
+function hideLobby(){ if(lobbyEl) lobbyEl.classList.remove('on'); }
+// Die Lobby bleibt offen, bis die Partie läuft: Spieler warten dort auf den
+// Gegner und stellen bis zum Start noch die Bedenkzeit ein.
+function syncLobby(){
+  if(!Sync.transport) return;
+  const offen = reviewIdx===null &&
+    ((mySide===null)||((mySide==='r'||mySide==='g')&&phase==='setup'));
+  if(offen) showLobby(); else hideLobby();
+}
+function renderLobby(){
+  if(!lobbyEl) return;
+  const bereit=Sync.ready;
+  for(const col of ['r','g']){
+    const btn=document.getElementById('seat'+col.toUpperCase());
+    if(!btn) continue;
+    const meiner=seats[col]===myId, belegt=seats[col]&&!meiner;
+    btn.disabled=!!belegt||!bereit;
+    btn.classList.toggle('on',meiner);
+    btn.querySelector('.who').textContent =
+      meiner?'du':(belegt?(names[col]||'besetzt'):'frei');
+  }
+  for(const b of document.querySelectorAll('#tcRow .tc')) b.disabled=!bereit;
+  const rs=document.getElementById('resetSeats'); if(rs) rs.disabled=!bereit;
+
+  const sitzt=(mySide==='r'||mySide==='g');
+  const beide=!!(seats.r&&seats.g);
+  const start=document.getElementById('lobbyStart');
+  if(start){
+    start.style.display=sitzt?'block':'none';
+    start.disabled=!beide||!bereit;
+    start.textContent=beide?'Spiel starten':'Warte auf Gegner …';
+  }
+  const lv=document.getElementById('lobbyLeave');
+  if(lv) lv.style.display=sitzt?'block':'none';
+  const sv=document.getElementById('seatV');
+  if(sv) sv.style.display=sitzt?'none':'block';
+  const step=document.getElementById('lobbyStep');
+  if(step) step.textContent = sitzt
+    ? (beide?'Bereit – Bedenkzeit prüfen und starten':'Warte auf den zweiten Spieler')
+    : 'Name, Farbe und Bedenkzeit wählen';
+  const m=document.getElementById('lobbyMsg');
+  if(m) m.textContent=bereit?lobbyMsg:('Verbinde mit '+(Net.mode||'der Gegenstelle')+' …');
+  renderHist();
+  if(leaveBtn){
+    leaveBtn.style.display=(mySide==='v')?'block':'none';
+    leaveBtn.textContent='Platz wählen';
+  }
+}
+function applySide(){
+  const sub=document.querySelector('.sub');
+  if(sub) sub.textContent = mySide==='r' ? 'Du spielst Rot'
+                          : mySide==='g' ? 'Du spielst Gelb'
+                          : mySide==='v' ? 'Zuschauer'
+                          : 'Zwei PCs · ein Brett';
+  const verstecken=(mySide==='v');
+  for(const id of ['newBtn','undoBtn']){
+    const b=document.getElementById(id); if(b) b.style.display=verstecken?'none':'block';
+  }
+  render(); renderLobby(); renderPlayers();
+}
+function myName(){
+  const el=document.getElementById('nameInput');
+  const n=clean(el&&el.value);
+  if(n){ try{ sessionStorage.setItem('vierName',n); }catch(e){} }
+  return n;
+}
+function dropMe(){
+  const vorher=specs.length;
+  specs=specs.filter(s=>s.id!==myId);
+  // Wer nur in der Zahl steckte, muss auch daraus verschwinden
+  if(specs.length===vorher && specPlus>0) specPlus--;
+}
+function takeSeat(col){
+  if(!seatFree(col)){ lobbyMsg='Platz ist bereits belegt.'; renderLobby(); return; }
+  const n=myName();
+  if(!n){ lobbyMsg='Bitte zuerst einen Namen eingeben.'; renderLobby(); return; }
+  dropMe();
+  // Wechselt jemand die Farbe, wird der bisherige Platz frei
+  const andere=gegner(col);
+  if(seats[andere]===myId){ seats[andere]=''; names[andere]=''; }
+  seats[col]=myId; names[col]=n; mySide=col; lobbyMsg='';
+  // Sitzt der Gegner noch in einer laufenden Partie, wird sie übernommen
+  const uebernahme = phase==='run' && !!seats[gegner(col)];
+  if(!uebernahme){
+    neuesSpielStill(); phase='setup'; result='';
+    const b=tcParts().base; clock={r:b,g:b}; clockAt=Date.now();
+  }
+  Sync.publish();
+  applySide(); syncLobby();
+  setTimeout(()=>{
+    if(mySide===col && seats[col]!==myId){
+      lobbyMsg='Ein anderer Spieler war schneller.'; leaveSeat(true);
+    }
+  },2500);
+}
+function watchOnly(){
+  const n=myName();
+  if(!n){ lobbyMsg='Bitte zuerst einen Namen eingeben.'; renderLobby(); return; }
+  dropMe();
+  if(specs.length<MAXSPECS) specs.push({id:myId,name:n}); else specPlus++;
+  mySide='v'; lobbyMsg=''; Sync.publish(); applySide(); syncLobby();
+}
+function leaveSeat(verloren){
+  if(mySide==='r'||mySide==='g'){
+    if(seats[mySide]===myId){ seats[mySide]=''; names[mySide]='';
+                              if(!verloren) Sync.publish(); }
+  } else if(mySide==='v'){ dropMe(); Sync.publish(); }
+  mySide=null; applySide(); syncLobby();
+}
+function resetSeats(){
+  seats.r=''; seats.g=''; names.r=''; names.g=''; specs=[]; specPlus=0;
+  neuesSpielStill(); phase='setup'; result='';
+  const b=tcParts().base; clock={r:b,g:b}; clockAt=Date.now();
+  lobbyMsg=''; Sync.publish(); render(); renderLobby(); renderPlayers();
+}
+
+/* ---------- PLC-Transport (zwei PCs, ein Brett) ----------
+   Synchronisiert über eine STRING-Variable der Steuerung, gelesen/geschrieben
+   über den B&R-AR-Webserver (goform/ReadWrite). Voraussetzung: response.asp
+   liegt im Webverzeichnis. Aktivierung mit ?plc; PV-Name via ?pv=...
+   (Vorgabe gVierState) - eine eigene Variable, damit Schach und Vier gewinnt
+   sich nicht gegenseitig überschreiben. */
+function setupPLC(){
+  const params=new URLSearchParams(location.search);
+  const pv=params.get('pv')||'gVierState';
+  const G='/goform/ReadWrite';
+  const body=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(pv)+tail;
+  function post(data,ms){ return fetchT(G,{method:'POST',body:data},ms); }
+  /* Schreiben mit Wiederholung: Solange etwas aussteht, wird kein empfangener
+     Stand übernommen - er wäre älter als das, was wir senden. Gesendet wird
+     dabei immer der JETZIGE Stand, nicht der beim Vormerken eingefrorene. */
+  let pending=null, sending=false, retry=null, pendingSince=0;
+  let stamp=0, sendingSince=0;
+  let wrote='', cutSeen=0;
+  const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
+  async function flush(){
+    if(sending||pending===null) return;
+    sending=true; sendingSince=Date.now();
+    const at=stamp;
+    let val; try{ val=serializeState(); }catch(e){ val=pending; }
+    try{
+      const r=await post(body('&value='+encodeURIComponent(val)+'&write=1'),6000);
+      if(!r.ok) throw new Error('Schreiben '+r.status);
+      if(stamp===at) pending=null;
+      Sync.last=val; wrote=val; Sync.fails=0; Net.writeOk();
+    }catch(e){ Sync.fails++; Net.writeFail(); }
+    finally{
+      sending=false;
+      Net.queued=pending===null?0:pendingSince;
+      try{ renderWarn(); }catch(e){}
+      if(pending!==null){
+        clearTimeout(retry);
+        retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
+      }
+    }
+  }
+  function write(val){
+    if(pending===null){ pendingSince=Date.now(); Net.queued=pendingSince; }
+    pending=val; stamp++; flush();
+  }
+  async function read(){
+    const t0=Date.now();
+    let r;
+    try{ r=await post(body('&value=none&read=1'),4000); }
+    catch(e){ Net.readFail(); throw e; }
+    if(!r.ok){ Net.readFail(); throw new Error('Lesen '+r.status); }
+    const t=(await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
+    if(t.indexOf('<')>=0){ Net.readFail(); throw new Error('Antwort ist keine Variable'); }
+    Net.readOk(Date.now()-t0);
+    return t;
+  }
+  Sync.transport={ send:write, confirms:true };
+  Sync.ready=false;          // bis zum ersten Abgleich nichts überschreiben
+
+  const hpv=params.get('hpv')||'gVierHist';
+  const hbody=(tail)=>'redirect=/response.asp&variable='+encodeURIComponent(hpv)+tail;
+  Hist.load=async()=>{
+    const r=await fetchT(G,{method:'POST',body:hbody('&value=none&read=1')},6000);
+    if(!r.ok) throw new Error('Lesen '+r.status);
+    return (await r.text()).replace('<!-- B&R ASP Webserver -->','').trim();
+  };
+  Hist.save=async(val)=>{
+    const r=await fetchT(G,{method:'POST',
+      body:hbody('&value='+encodeURIComponent(val)+'&write=1')},6000);
+    if(!r.ok) throw new Error('Schreiben '+r.status);
+  };
+  Hist.name=hpv;
+  Hist.hint='Variable '+hpv+' auf der Steuerung anlegen (STRING[2000], remanent).';
+
+  const side=(params.get('side')||'').toLowerCase().charAt(0);
+  applySide(); showLobby();
+
+  let busy=false, busySince=0;
+  async function poll(){
+    if(busy) return;
+    busy=true; busySince=Date.now();
+    try{
+      const remote=await read();
+      Sync.fails=0;
+      /* Kommt der eigene Stand zeichengenau gekürzt zurück, ist nicht die
+         Leitung schuld: Der Webserver bestätigt das Schreiben, abgelegt wird
+         aber nur, was hineinpasst. Ohne diese Prüfung sieht es aus wie ein
+         veralteter Gegenstand, und beide Seiten überschreiben sich endlos. */
+      /* Ist die Antwort zeichengenau ein Anfangsstück dessen, was wir selbst
+         geschrieben haben, ist es unser eigener, unterwegs gekürzter Stand.
+         Den darf man nie übernehmen - sonst verliert man die eigenen Züge an
+         den Webserver, der sie gerade abgeschnitten hat. */
+      const eigenGekuerzt=!!(wrote && remote.length<wrote.length &&
+                             wrote.indexOf(remote)===0);
+      if(eigenGekuerzt){
+        if(++cutSeen>=2){
+          Net.cut={pv:pv, cap:remote.length, need:wrote.length};
+          /* Jetzt ist die wirkliche Obergrenze bekannt. Der kürzere Stand muss
+             sofort raus - nicht über Sync.again(), das hält Abstand und würde
+             hier womöglich gar nichts senden. Drüben stünde sonst weiterhin
+             der abgeschnittene Stand, und das Spiel bliebe stehen. */
+          if(remote.length>=100 && WIRE_MAX>remote.length-8){
+            WIRE_MAX=remote.length-8;
+            wrote='';                       // sonst gilt der alte Vergleich weiter
+            Sync.wieder();
+          }
+        }
+      } else { cutSeen=0; Net.cut=null; }
+      if(!eigenGekuerzt && !holdsBack() && acceptState(remote)){
+        if(Sync.ready && outdated(remote)){
+          if(!Net.cut) Sync.again();
+        } else if(!Sync.ready){
+          Sync.last=remote;
+          applyState(parseState(remote));
+          Sync.ready=true;
+          try{ renderLobby(); }catch(e){}
+          if(side==='r'||side==='g') takeSeat(side);
+          else if(side==='v') watchOnly();
+        } else if(remote!==Sync.last){ Sync.receive(remote); }
+      }
+    }catch(e){ Sync.fails++; }
+    finally{
+      busy=false;
+      try{ renderWarn(); }catch(e){}
+    }
+  }
+  /* Bei Störungen Abstand halten. Die Kette darf dabei nie abreißen: ein
+     einziger Fehler ohne .catch würde die Abfrage dauerhaft beenden. */
+  let lastTry=0, timer=null;
+  function loop(){
+    lastTry=Date.now();
+    poll().catch(()=>{}).then(()=>{
+      const wait=Sync.fails?Math.min(5000,1000*Math.pow(2,Math.min(Sync.fails,3))):1000;
+      clearTimeout(timer); timer=setTimeout(loop,wait);
+    });
+  }
+  loop();
+  /* Wachhund: läuft unabhängig von der Kette und löst notfalls hängende
+     Sperren - bliebe ein Zugriff offen, wäre der Abgleich sonst für immer aus. */
+  setInterval(()=>{
+    const now=Date.now();
+    if(busy && now-busySince>15000) busy=false;
+    if(sending && now-sendingSince>15000) sending=false;
+    if(!busy && now-lastTry>8000){ clearTimeout(timer); loop(); }
+    if(pending!==null && !sending) flush();
+    try{ reconcile(); }catch(e){}
+  },5000);
+  setInterval(renderNet,1000);
+  Net.mode='Steuerung';
+  Net.reconnect=()=>{
+    Sync.fails=0; clearTimeout(timer); clearTimeout(retry);
+    busy=false; sending=false;
+    loop(); if(pending!==null) flush(); refreshHist(true);
+  };
+}
+
+/* ---------- Server-Transport ----------
+   Zwei Gegenstellen: der Node-Server (schiebt Änderungen per Ereignisstrom)
+   und die PHP-Fassung für klassisches Webhosting (wird abgefragt). Welche
+   vorhanden ist, ermittelt detectApi(). Der Parameter spiel=vier hält den
+   Spielstand von dem des Schachs getrennt. */
+const Api={base:'',ext:'',sse:true};
+const RAUM='vier';
+function apiUrl(name){ return Api.base+'api/'+name+Api.ext+'?spiel='+RAUM; }
+async function detectApi(){
+  const dir=location.pathname.replace(/[^/]*$/,'');   // erlaubt Unterordner
+  for(const c of [{ext:'',sse:true},{ext:'.php',sse:false}]){
+    try{
+      const r=await fetch(dir+'api/health'+c.ext,{cache:'no-store'});
+      if(!r.ok) continue;
+      let j={}; try{ j=await r.json(); }catch(e){}
+      Api.base=dir; Api.ext=c.ext; Api.sse=c.sse&&j.backend!=='php';
+      return true;
+    }catch(e){}
+  }
+  return false;
+}
+function setupServer(){
+  let pending=null, sending=false, retry=null, pendingSince=0;
+  let stamp=0, sendingSince=0;
+  const holdsBack=()=>pending!==null && Date.now()-pendingSince<10000;
+  async function flush(){
+    if(sending||pending===null) return;
+    sending=true; sendingSince=Date.now();
+    const at=stamp;
+    let val; try{ val=serializeState(); }catch(e){ val=pending; }
+    try{
+      const r=await fetchT(apiUrl('state'),{method:'POST',
+        headers:{'Content-Type':'text/plain'},body:val},6000);
+      if(!r.ok) throw new Error('Schreiben '+r.status);
+      if(stamp===at) pending=null;
+      Sync.last=val; Sync.fails=0; Net.writeOk();
+    }catch(e){ Sync.fails++; Net.writeFail(); }
+    sending=false;
+    Net.queued=pending===null?0:pendingSince;
+    try{ renderWarn(); }catch(e){}
+    if(pending!==null){
+      clearTimeout(retry);
+      retry=setTimeout(flush,Math.min(4000,400*Math.pow(2,Math.min(Sync.fails,3))));
+    }
+  }
+  Sync.transport={ send:(val)=>{
+      if(pending===null){ pendingSince=Date.now(); Net.queued=pendingSince; }
+      pending=val; stamp++; flush(); }, confirms:true };
+  Sync.ready=false;
+
+  Hist.load=async()=>{
+    const r=await fetchT(apiUrl('hist'),{cache:'no-store'},6000);
+    if(!r.ok) throw new Error('Lesen '+r.status);
+    return (await r.json()).s;
+  };
+  Hist.save=async(val)=>{
+    const r=await fetchT(apiUrl('hist'),
+      {method:'POST',headers:{'Content-Type':'text/plain'},body:val},6000);
+    if(!r.ok) throw new Error('Schreiben '+r.status);
+  };
+  Hist.name=apiUrl('hist');
+  Hist.hint=Api.ext==='.php'
+    ? 'Auf dem Webspace fehlt api/hist.php, oder der Ordner api ist nicht '+
+      'beschreibbar (api/health.php muss "writable":true melden).'
+    : 'Der Server beantwortet /api/hist nicht - läuft dort die aktuelle Fassung?';
+  applySide(); showLobby();
+
+  function apply(txt){
+    if(holdsBack()) return;
+    if(!acceptState(txt)) return;
+    if(Sync.ready && outdated(txt)){ Sync.again(); return; }
+    if(!Sync.ready){
+      Sync.last=txt; applyState(parseState(txt));
+      Sync.ready=true; renderLobby();
+    } else if(txt!==Sync.last){ Sync.receive(txt); }
+  }
+  let live=false, es=null, lastEvt=0, reopen=null;
+  function openStream(){
+    if(!Api.sse) return;
+    clearTimeout(reopen);
+    try{ if(es) es.close(); }catch(e){}
+    lastEvt=Date.now();
+    try{
+      es=new EventSource(apiUrl('events'));
+      es.onmessage=(e)=>{ live=true; lastEvt=Date.now(); Net.readOk(Net.avg||20);
+                          try{ apply(JSON.parse(e.data).s); }catch(err){} };
+      es.onerror=()=>{ live=false;
+                       clearTimeout(reopen); reopen=setTimeout(openStream,5000); };
+    }catch(e){}
+  }
+  openStream();
+  async function poll(){
+    if(live&&Sync.ready) return;
+    try{
+      const t0=Date.now();
+      const r=await fetchT(apiUrl('state'),{cache:'no-store'},4000);
+      if(!r.ok) throw new Error('Lesen '+r.status);
+      apply((await r.json()).s);
+      Sync.fails=0; Net.readOk(Date.now()-t0);
+    }catch(e){ Sync.fails++; Net.readFail(); }
+    finally{ try{ renderWarn(); }catch(e){} }
+  }
+  const tick=()=>{ try{ poll().catch(()=>{}); }catch(e){} };
+  tick();
+  setInterval(tick,Api.sse?3000:1000);     // ohne Ereignisstrom öfter nachsehen
+  setInterval(()=>{
+    if(sending && Date.now()-sendingSince>15000) sending=false;
+    if(pending!==null && !sending) flush();
+    if(Api.sse && Date.now()-lastEvt>40000){ live=false; openStream(); }
+    try{ reconcile(); }catch(e){}
+  },5000);
+  setInterval(renderNet,1000);
+  Net.mode='Server';
+  Net.reconnect=()=>{
+    Sync.fails=0; sending=false;
+    openStream(); tick(); if(pending!==null) flush(); refreshHist(true);
+  };
+}
+
+/* ---------- Bedienelemente ---------- */
+try{ const n=sessionStorage.getItem('vierName');
+     if(n) document.getElementById('nameInput').value=n; }catch(e){}
+for(const btn of document.querySelectorAll('.tc'))
+  btn.addEventListener('click',()=>setTC(btn.dataset.tc));
+for(const b of document.querySelectorAll('.httab'))
+  b.addEventListener('click',()=>{ histTab=b.dataset.tab; renderHist(); });
+document.getElementById('netBtn').addEventListener('click',(e)=>{
+  if(!Net.reconnect) return;
+  const b=e.currentTarget;
+  b.classList.add('busy'); setTimeout(()=>b.classList.remove('busy'),1200);
+  Net.reconnect();
+});
+/* Browser drosseln Zeitgeber im Hintergrund stark - beim Zurückkehren also
+   sofort abgleichen, statt auf den nächsten Takt zu warten. */
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && Net.reconnect) Net.reconnect();
+});
+window.addEventListener('pageshow',(e)=>{ if(e.persisted && Net.reconnect) Net.reconnect(); });
+window.addEventListener('online',()=>{ if(Net.reconnect) Net.reconnect(); });
+window.addEventListener('offline',()=>{ Sync.fails+=3; renderNet(); });
+
+document.getElementById('recapClose').addEventListener('click',hideRecap);
+document.getElementById('recapReview').addEventListener('click',startReview);
+document.getElementById('rvFirst').addEventListener('click',()=>reviewGo(0));
+document.getElementById('rvPrev').addEventListener('click',()=>reviewGo(reviewIdx-1));
+document.getElementById('rvNext').addEventListener('click',()=>reviewGo(reviewIdx+1));
+document.getElementById('rvLast').addEventListener('click',()=>reviewGo(history.length));
+document.getElementById('rvExit').addEventListener('click',endReview);
+document.addEventListener('keydown',e=>{
+  if(reviewIdx===null) return;
+  if(e.key==='ArrowLeft'){ reviewGo(reviewIdx-1); e.preventDefault(); }
+  if(e.key==='ArrowRight'){ reviewGo(reviewIdx+1); e.preventDefault(); }
+});
+document.getElementById('recapBtn').addEventListener('click',()=>{
+  if(recapData) showRecap({}); else runRecap();
+});
+document.getElementById('lobbyStart').addEventListener('click',startGame);
+document.getElementById('lobbyLeave').addEventListener('click',()=>leaveSeat(false));
+document.getElementById('seatR').addEventListener('click',()=>takeSeat('r'));
+document.getElementById('seatG').addEventListener('click',()=>takeSeat('g'));
+document.getElementById('seatV').addEventListener('click',watchOnly);
+document.getElementById('resetSeats').addEventListener('click',resetSeats);
+leaveBtn.addEventListener('click',()=>leaveSeat(false));
+document.getElementById('newBtn').addEventListener('click',newGame);
+document.getElementById('undoBtn').addEventListener('click',undo);
+document.getElementById('undoYes').addEventListener('click',undoAccept);
+document.getElementById('undoNo').addEventListener('click',undoDecline);
+
+loadLocalHist();             // Hotseat: Historie aus dem Browser
+newGame();                   // frisches Brett – Transport hängt noch nicht -> kein Publish
+
+/* Betriebsart wählen: ?plc erzwingt die Steuerung, ?srv den Server, ?demo
+   zwei Tabs. Ohne Angabe wird geprüft, ob ein Server antwortet - wird die
+   Seite vom Container ausgeliefert, läuft sie damit ohne Zusatz-URL. */
+const _q=location.search;
+if(_q.indexOf('plc')>=0){
+  setupPLC();
+} else if(_q.indexOf('srv')>=0){
+  setupServer();
+} else if(_q.indexOf('demo')>=0 && 'BroadcastChannel' in window){
+  const bc=new BroadcastChannel('vier-sync');
+  Sync.transport={ send:(s)=>bc.postMessage(s) };
+  bc.onmessage=(e)=>Sync.receive(e.data);
+  applySide(); showLobby();
+} else if(location.protocol!=='file:'){
+  detectApi().then(gefunden=>{ if(gefunden) setupServer(); });   // sonst Hotseat
+}
+</script>
+</body>
+</html>

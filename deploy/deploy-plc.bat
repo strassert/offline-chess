@@ -22,10 +22,10 @@ set "BRANCH=main"
 set "LOGFILE=%TEMP%\deploy-plc.log"
 
 rem Nur diese Dateien braucht die Steuerung
-set "FILES=chess.html response.asp stockfish-18-lite-single.js stockfish-18-lite-single.wasm"
+set "FILES=chess.html vier.html response.asp stockfish-18-lite-single.js stockfish-18-lite-single.wasm"
 
 echo.
-echo === Schach auf die Steuerung uebertragen ===
+echo === Spiele auf die Steuerung uebertragen ===
 echo   Ziel:   %PLCHOST%  ^-^>  %PLCDRIVE%\%PLCDIR%
 echo   Quelle: GitHub %REPO% (%BRANCH%)
 echo.
@@ -140,11 +140,14 @@ if "!CODE!"=="200" (
 )
 
 echo.
-echo   Spielen:   http://%PLCHOST%/chess.html?plc
+echo   Schach:        http://%PLCHOST%/chess.html?plc
+echo   Vier gewinnt:  http://%PLCHOST%/vier.html?plc
 echo.
 echo   Benoetigte Variablen auf der Steuerung:
 echo     gChessState : STRING[2000]
 echo     gChessHist  : STRING[2000]  ^(remanent, haelt die Partie-Historie^)
+echo     gVierState  : STRING[1000]  ^(nur fuer Vier gewinnt^)
+echo     gVierHist   : STRING[2000]  ^(remanent, nur fuer Vier gewinnt^)
 echo   Im Browser mit Strg+F5 laden, sonst zeigt er den alten Stand.
 echo.
 pause

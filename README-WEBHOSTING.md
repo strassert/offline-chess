@@ -46,7 +46,9 @@ Ergebnis auf dem Webspace:
 ```
 
 Die Dateien `api/state.txt` (Spielstand) und `api/hist.txt` (vergangene
-Partien) legt PHP selbst an.
+Partien) legt PHP selbst an – für jedes weitere Spiel ein eigenes Paar,
+`api/state-vier.txt` und `api/hist-vier.txt`. Welches gemeint ist, sagt der
+Parameter `?spiel=`; ohne ihn bleibt es beim Schach.
 
 ## Schritte
 
@@ -423,7 +425,7 @@ merkbar.
 |---------|---------|
 | Lobby erscheint nicht, Untertitel bleibt „Hotseat" | `api/health.php` nicht erreichbar – Ordner falsch benannt oder PHP aus |
 | `"writable":false` | Schreibrechte auf `api/` fehlen |
-| Partie hängt, Plätze belegt | `curl -X POST https://…/api/reset.php` oder `api/state.txt` per FTP löschen |
+| Partie hängt, Plätze belegt | `curl -X POST https://…/api/reset.php` oder `api/state.txt` per FTP löschen (Vier gewinnt: `…/api/reset.php?spiel=vier` bzw. `api/state-vier.txt`) |
 | „Historie kann nicht gespeichert werden (Lesen 404)" | `api/hist.php` wurde nicht mit hochgeladen |
 | „… (Schreiben 500)" | Schreibrechte auf `api/` fehlen, siehe `"writable"` in `health.php` |
 | Analyse bleibt aus | `.wasm` fehlt, wurde als Text übertragen, oder `.htaccess` mit `AddType application/wasm` fehlt |
